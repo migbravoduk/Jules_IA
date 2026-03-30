@@ -90,12 +90,14 @@ def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str) -> str:
         f"El usuario te pide lo siguiente: '{instruccion}'. "
         f"Genera la estructura de un documento extenso estrictamente en formato JSON, "
         f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
+        f"Si el usuario pide tablas o datos estructurados, usa el tipo 'tabla'. "
         f"Formato esperado:\n"
         f"[\n"
         f"  {{\"tipo\": \"titulo\", \"texto\": \"Título Principal\"}},\n"
         f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1\"}},\n"
         f"  {{\"tipo\": \"parrafo\", \"texto\": \"Contenido del párrafo...\"}},\n"
-        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}}\n"
+        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}},\n"
+        f"  {{\"tipo\": \"tabla\", \"filas\": [[\"Encabezado 1\", \"Encabezado 2\"], [\"Fila 1 Col 1\", \"Fila 1 Col 2\"]]}}\n"
         f"]"
     )
     respuesta = ask_chatgpt_web(prompt)
