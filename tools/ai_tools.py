@@ -6,8 +6,21 @@ from main import (
 )
 from tools.web_ai_tools import ask_chatgpt_web
 from tools.ppt_tools import crear_ppt_compleja_desde_json
+from tools.word_tools import crear_word_complejo_desde_json
+from tools.excel_tools import crear_excel_complejo_desde_json
 import re
 import json
+
+def limpiar_json_de_chatgpt(respuesta: str) -> str:
+    """Limpia la respuesta de ChatGPT si viene con bloques Markdown de código."""
+    texto_json = respuesta.strip()
+    if texto_json.startswith("```json"):
+        texto_json = texto_json[7:]
+    elif texto_json.startswith("```"):
+         texto_json = texto_json[3:]
+    if texto_json.endswith("```"):
+        texto_json = texto_json[:-3]
+    return texto_json.strip()
 
 def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str) -> str:
     """Orquesta la creación de una PPT compleja usando ChatGPT vía Selenium."""
@@ -29,18 +42,53 @@ def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str) -> str:
     if respuesta.startswith("❌"):
         return respuesta
 
-    # 2. Limpiar respuesta (a veces ChatGPT añade ```json ... ```)
-    texto_json = respuesta.strip()
-    if texto_json.startswith("```json"):
-        texto_json = texto_json[7:]
-    if texto_json.startswith("```"):
-         texto_json = texto_json[3:]
-    if texto_json.endswith("```"):
-        texto_json = texto_json[:-3]
-    texto_json = texto_json.strip()
+    # 2. Limpiar respuesta
+    texto_json = limpiar_json_de_chatgpt(respuesta)
 
     # 3. Crear PPT
     return crear_ppt_compleja_desde_json(filename, texto_json)
+
+def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str) -> str:
+    """Orquesta la creación de un Word complejo usando ChatGPT vía Selenium."""
+    prompt = (
+        f"Actúa como un experto redactor de informes profesionales. "
+        f"El usuario te pide lo siguiente: '{instruccion}'. "
+        f"Genera la estructura de un documento extenso estrictamente en formato JSON, "
+        f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
+        f"Formato esperado:\n"
+        f"[\n"
+        f"  {{\"tipo\": \"titulo\", \"texto\": \"Título Principal\"}},\n"
+        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1\"}},\n"
+        f"  {{\"tipo\": \"parrafo\", \"texto\": \"Contenido del párrafo...\"}},\n"
+        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}}\n"
+        f"]"
+    )
+    respuesta = ask_chatgpt_web(prompt)
+    if respuesta.startswith("❌"):
+        return respuesta
+    texto_json = limpiar_json_de_chatgpt(respuesta)
+    return crear_word_complejo_desde_json(filename, texto_json)
+
+def cmd_crear_excel_complejo_con_chatgpt(instruccion: str, filename: str) -> str:
+    """Orquesta la creación de un Excel complejo usando ChatGPT vía Selenium."""
+    prompt = (
+        f"Actúa como un analista de datos experto. "
+        f"El usuario te pide generar un excel con lo siguiente: '{instruccion}'. "
+        f"Genera la estructura de los datos estrictamente en formato JSON, "
+        f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
+        f"La respuesta debe ser una lista de hojas. Formato esperado:\n"
+        f"[\n"
+        f"  {{\"hoja\": \"Resumen Financiero\", \"datos\": [\n"
+        f"      [\"Mes\", \"Ingresos\", \"Egresos\", \"Balance\"],\n"
+        f"      [\"Enero\", 15000, 10000, 5000]\n"
+        f"  ]}}\n"
+        f"]"
+    )
+    respuesta = ask_chatgpt_web(prompt)
+    if respuesta.startswith("❌"):
+        return respuesta
+    texto_json = limpiar_json_de_chatgpt(respuesta)
+    return crear_excel_complejo_desde_json(filename, texto_json)
 
 def dispatcher_ia(instruccion: str) -> str:
     """
@@ -53,9 +101,18 @@ def dispatcher_ia(instruccion: str) -> str:
     if "lista" in instruccion_lower or "mostrar archivos" in instruccion_lower:
         return cmd_listar()
 
-    # --- WORD PROFESIONAL ---
+    # --- WORD COMPLEJO (CHATGPT) ---
+    elif ("word complejo" in instruccion_lower or "informe complejo" in instruccion_lower or
+          "documento extenso" in instruccion_lower or ("word" in instruccion_lower and "chatgpt" in instruccion_lower)):
+        tema = "Tema general"
+        match = re.search(r"sobre (.+?)( en word|\.docx|$)", instruccion_lower)
+        if match:
+            tema = match.group(1).strip()
+        filename = f"{tema.replace(' ', '_')}_gpt.docx"
+        return cmd_crear_word_complejo_con_chatgpt(instruccion, filename)
+
+    # --- WORD BÁSICO (OLLAMA) ---
     elif "word" in instruccion_lower or "informe profesional" in instruccion_lower:
-        # Extraer el tema si es posible de "sobre [tema]"
         tema = "Tema general"
         match = re.search(r"sobre (.+?)( en word| \.docx|$)", instruccion_lower)
         if match:
@@ -64,7 +121,17 @@ def dispatcher_ia(instruccion: str) -> str:
         filename = f"{tema.replace(' ', '_')}.docx"
         return cmd_crear_docx_profesional(titulo=f"Informe: {tema}", tema=tema, filename=filename)
 
-    # --- EXCEL ---
+    # --- EXCEL COMPLEJO (CHATGPT) ---
+    elif ("excel complejo" in instruccion_lower or "datos complejos" in instruccion_lower or
+          ("excel" in instruccion_lower and "chatgpt" in instruccion_lower)):
+        tema = "datos_generados"
+        match = re.search(r"sobre (.+?)( en excel|\.xlsx|$)", instruccion_lower)
+        if match:
+            tema = match.group(1).strip()
+        filename = f"{tema.replace(' ', '_')}_gpt.xlsx"
+        return cmd_crear_excel_complejo_con_chatgpt(instruccion, filename)
+
+    # --- EXCEL BÁSICO ---
     elif "excel" in instruccion_lower:
         if "formato" in instruccion_lower or "formatear" in instruccion_lower:
             return "Comando de formatear Excel detectado. Falta implementar el flujo completo de selección de archivo."
