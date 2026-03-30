@@ -9,6 +9,7 @@ BASE_DIRS = {
     "proyecto": PROJECT_ROOT,
     "templates": PROJECT_ROOT / "templates",
     "outputs": PROJECT_ROOT / "outputs",
+    "inputs": PROJECT_ROOT / "inputs",
     "temp": PROJECT_ROOT / "temp"
 }
 
