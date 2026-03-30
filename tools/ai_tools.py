@@ -162,15 +162,14 @@ def dispatcher_ia(instruccion: str) -> str:
         filename = f"{tema.replace(' ', '_')}.txt"
         return cmd_crear_tema(tema, filename)
 
-    # --- RESUMIR ---
-    elif "resume" in instruccion_lower:
-         if "web" in instruccion_lower or "http" in instruccion_lower:
-             match = re.search(r"(https?://\S+)", instruccion_lower)
-             if match:
-                 return cmd_resumir_web(match.group(1))
-             return "Comando de resumir web detectado, pero no encontré una URL válida."
-         else:
-             return "Comando de resumir archivo detectado. Falta el nombre del archivo."
+    # --- RESUMIR ARCHIVO O WEB ---
+    elif "resume el archivo" in instruccion_lower or "resumir el archivo" in instruccion_lower:
+        return "Comando de resumir archivo detectado. Falta el nombre del archivo."
+    elif "resume la web" in instruccion_lower or "resumir la web" in instruccion_lower or "http" in instruccion_lower:
+        match = re.search(r"(https?://\S+)", instruccion_lower)
+        if match:
+            return cmd_resumir_web(match.group(1))
+        return "Comando de resumir web detectado, pero no encontré una URL válida."
 
     # --- PREGUNTA DIRECTA A CHATGPT (NUEVO) ---
     elif "preguntale a chatgpt" in instruccion_lower or "usar ia web" in instruccion_lower:
@@ -178,6 +177,20 @@ def dispatcher_ia(instruccion: str) -> str:
         if not prompt:
              return "Por favor dime qué quieres preguntarle a ChatGPT."
         return ask_chatgpt_web(prompt)
+
+    # --- INVESTIGACIÓN COMPLEJA O GENERACIÓN DE TEXTO GENÉRICA (POR DEFECTO WORD) ---
+    elif len(instruccion) > 80 or any(kw in instruccion_lower for kw in ["investiga", "noticias", "creame un resumen", "hazme un resumen"]):
+        # Extraer nombre del archivo si lo pide explícitamente ("llámale al archivo 'X'")
+        filename = "investigacion_gpt.docx"
+        match_nombre = re.search(r'll[aá]male al archivo ["\'](.+?)["\']', instruccion, flags=re.IGNORECASE)
+        if not match_nombre:
+             match_nombre = re.search(r'llamado ["\'](.+?)["\']', instruccion, flags=re.IGNORECASE)
+
+        if match_nombre:
+             filename = f"{match_nombre.group(1).replace(' ', '_')}.docx"
+
+        # Si la instrucción no menciona explícitamente PPT o Excel, asumimos Word como reporte general
+        return cmd_crear_word_complejo_con_chatgpt(instruccion, filename)
 
     else:
         return f"Instrucción no reconocida o no soportada aún por el dispatcher.\nInstrucción recibida: {instruccion}"
