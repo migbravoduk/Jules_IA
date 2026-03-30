@@ -10,6 +10,41 @@ from tools.word_tools import crear_word_complejo_desde_json
 from tools.excel_tools import crear_excel_complejo_desde_json
 import re
 import json
+import datetime
+import string
+
+def obtener_nombre_seguro(instruccion: str, fallback_tema: str) -> str:
+    """
+    Busca si el usuario pidió un nombre específico ("llámale al archivo 'X'").
+    Limpia caracteres inválidos y añade la fecha si lo solicita.
+    """
+    nombre = fallback_tema
+
+    # 1. Buscar nombre explícito
+    match_nombre = re.search(r'll[aá]male[^\"]+?[\"\'](.+?)[\"\']', instruccion, flags=re.IGNORECASE)
+    if not match_nombre:
+        match_nombre = re.search(r'llamado[\s]+[\"\'](.+?)[\"\']', instruccion, flags=re.IGNORECASE)
+
+    if match_nombre:
+        nombre = match_nombre.group(1).strip()
+    else:
+        # Si usa el fallback_tema (que suele ser un pedazo largo de la instrucción)
+        # lo truncamos a 40 caracteres máximo
+        nombre = nombre[:40].strip()
+
+    # 2. Reemplazar espacios por guiones bajos
+    nombre = nombre.replace(" ", "_")
+
+    # 3. Eliminar caracteres inválidos para Windows/Linux
+    valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
+    nombre_limpio = ''.join(c for c in nombre if c in valid_chars)
+
+    # 4. Añadir fecha si lo pide
+    if "fecha de hoy" in instruccion.lower() or "añadele la fecha" in instruccion.lower() or "añádele la fecha" in instruccion.lower():
+        fecha_str = datetime.datetime.now().strftime("%Y-%m-%d")
+        nombre_limpio = f"{nombre_limpio}_{fecha_str}"
+
+    return nombre_limpio
 
 def limpiar_json_de_chatgpt(respuesta: str) -> str:
     """Limpia la respuesta de ChatGPT si viene con bloques Markdown de código."""
@@ -101,66 +136,58 @@ def dispatcher_ia(instruccion: str) -> str:
     if "lista" in instruccion_lower or "mostrar archivos" in instruccion_lower:
         return cmd_listar()
 
-    # --- WORD COMPLEJO (CHATGPT) ---
-    elif ("word complejo" in instruccion_lower or "informe complejo" in instruccion_lower or
-          "documento extenso" in instruccion_lower or ("word" in instruccion_lower and "chatgpt" in instruccion_lower)):
-        tema = "Tema general"
-        match = re.search(r"sobre (.+?)( en word|\.docx|$)", instruccion_lower)
-        if match:
-            tema = match.group(1).strip()
-        filename = f"{tema.replace(' ', '_')}_gpt.docx"
-        return cmd_crear_word_complejo_con_chatgpt(instruccion, filename)
+    # Variables de complejidad: si la instrucción tiene más de 80 caracteres o palabras clave "fuertes".
+    es_complejo = len(instruccion) > 80 or any(kw in instruccion_lower for kw in [
+        "complejo", "chatgpt", "extenso", "investiga", "noticias", "detallado", "creame un"
+    ])
 
-    # --- WORD BÁSICO (OLLAMA) ---
-    elif "word" in instruccion_lower or "informe profesional" in instruccion_lower:
-        tema = "Tema general"
-        match = re.search(r"sobre (.+?)( en word| \.docx|$)", instruccion_lower)
-        if match:
-            tema = match.group(1).strip()
+    # --- WORD ---
+    if "word" in instruccion_lower or "informe" in instruccion_lower:
+        tema = "Tema_general"
+        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
+        if match: tema = match.group(1).strip()
+        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
 
-        filename = f"{tema.replace(' ', '_')}.docx"
-        return cmd_crear_docx_profesional(titulo=f"Informe: {tema}", tema=tema, filename=filename)
+        if es_complejo:
+            return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx")
+        else:
+            return cmd_crear_docx_profesional(titulo=f"Informe: {tema}", tema=tema, filename=f"{nombre_limpio}.docx")
 
-    # --- EXCEL COMPLEJO (CHATGPT) ---
-    elif ("excel complejo" in instruccion_lower or "datos complejos" in instruccion_lower or
-          ("excel" in instruccion_lower and "chatgpt" in instruccion_lower)):
-        tema = "datos_generados"
-        match = re.search(r"sobre (.+?)( en excel|\.xlsx|$)", instruccion_lower)
-        if match:
-            tema = match.group(1).strip()
-        filename = f"{tema.replace(' ', '_')}_gpt.xlsx"
-        return cmd_crear_excel_complejo_con_chatgpt(instruccion, filename)
-
-    # --- EXCEL BÁSICO ---
+    # --- EXCEL ---
     elif "excel" in instruccion_lower:
         if "formato" in instruccion_lower or "formatear" in instruccion_lower:
             return "Comando de formatear Excel detectado. Falta implementar el flujo completo de selección de archivo."
+
+        tema = "datos_generados"
+        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
+        if match: tema = match.group(1).strip()
+        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
+
+        if es_complejo:
+            return cmd_crear_excel_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.xlsx")
         else:
-             # Ejemplo genérico
              datos = [["Nombre", "Valor"], ["Dato A", 10], ["Dato B", 20]]
-             return cmd_escribir_excel("ejemplo_generado.xlsx", "Hoja1", datos)
+             return cmd_escribir_excel(f"{nombre_limpio}.xlsx", "Hoja1", datos)
 
-    # --- POWERPOINT COMPLEJO (NUEVO SKILL VÍA CHATGPT) ---
-    elif ("ppt compleja" in instruccion_lower or "presentacion compleja" in instruccion_lower or
-          ("ppt" in instruccion_lower and "chatgpt" in instruccion_lower)):
-        tema = "Tema general"
-        match = re.search(r"sobre (.+?)( en ppt|\.pptx|$)", instruccion_lower)
-        if match:
-            tema = match.group(1).strip()
-
-        filename = f"{tema.replace(' ', '_')}_gpt.pptx"
-        return cmd_crear_ppt_compleja_con_chatgpt(instruccion, filename)
-
-    # --- POWERPOINT BÁSICO ---
+    # --- POWERPOINT ---
     elif "ppt" in instruccion_lower or "presentacion" in instruccion_lower or "powerpoint" in instruccion_lower:
-        return "Comando de actualizar PPT detectado. Falta el diccionario de reemplazos."
+        tema = "Tema_general"
+        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
+        if match: tema = match.group(1).strip()
+        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
+
+        if es_complejo:
+            return cmd_crear_ppt_compleja_con_chatgpt(instruccion, f"{nombre_limpio}.pptx")
+        else:
+            return "Comando de actualizar PPT detectado. Falta el diccionario de reemplazos."
 
     # --- TXT / TEMAS ---
     elif "escribe" in instruccion_lower or "crea un tema" in instruccion_lower:
-        match = re.search(r"sobre (.+?)( en un archivo|$)", instruccion_lower)
-        tema = match.group(1).strip() if match else "Tema generico"
-        filename = f"{tema.replace(' ', '_')}.txt"
-        return cmd_crear_tema(tema, filename)
+        tema = "Tema_generico"
+        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
+        if match: tema = match.group(1).strip()
+        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
+        return cmd_crear_tema(tema, f"{nombre_limpio}.txt")
 
     # --- RESUMIR ARCHIVO O WEB ---
     elif "resume el archivo" in instruccion_lower or "resumir el archivo" in instruccion_lower:
@@ -171,26 +198,19 @@ def dispatcher_ia(instruccion: str) -> str:
             return cmd_resumir_web(match.group(1))
         return "Comando de resumir web detectado, pero no encontré una URL válida."
 
-    # --- PREGUNTA DIRECTA A CHATGPT (NUEVO) ---
+    # --- PREGUNTA DIRECTA A CHATGPT ---
     elif "preguntale a chatgpt" in instruccion_lower or "usar ia web" in instruccion_lower:
         prompt = instruccion.replace("preguntale a chatgpt", "").replace("usar ia web", "").strip()
-        if not prompt:
-             return "Por favor dime qué quieres preguntarle a ChatGPT."
+        if not prompt: return "Por favor dime qué quieres preguntarle a ChatGPT."
         return ask_chatgpt_web(prompt)
 
-    # --- INVESTIGACIÓN COMPLEJA O GENERACIÓN DE TEXTO GENÉRICA (POR DEFECTO WORD) ---
-    elif len(instruccion) > 80 or any(kw in instruccion_lower for kw in ["investiga", "noticias", "creame un resumen", "hazme un resumen"]):
-        # Extraer nombre del archivo si lo pide explícitamente ("llámale al archivo 'X'")
-        filename = "investigacion_gpt.docx"
-        match_nombre = re.search(r'll[aá]male al archivo ["\'](.+?)["\']', instruccion, flags=re.IGNORECASE)
-        if not match_nombre:
-             match_nombre = re.search(r'llamado ["\'](.+?)["\']', instruccion, flags=re.IGNORECASE)
-
-        if match_nombre:
-             filename = f"{match_nombre.group(1).replace(' ', '_')}.docx"
-
-        # Si la instrucción no menciona explícitamente PPT o Excel, asumimos Word como reporte general
-        return cmd_crear_word_complejo_con_chatgpt(instruccion, filename)
+    # --- FALLBACK: TAREA COMPLEJA GENÉRICA (ASUMIMOS WORD) ---
+    elif es_complejo:
+        tema = "investigacion_general"
+        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
+        if match: tema = match.group(1).strip()
+        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
+        return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx")
 
     else:
         return f"Instrucción no reconocida o no soportada aún por el dispatcher.\nInstrucción recibida: {instruccion}"
