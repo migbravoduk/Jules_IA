@@ -1,0 +1,66 @@
+from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from sandbox import resolve_path
+import os
+
+def crear_documento_profesional(titulo: str, contenido: str, filename: str, context: str = "outputs") -> str:
+    """
+    Crea un documento de Word con formato profesional:
+    - Título centrado
+    - Párrafos justificados
+    - Formato limpio
+    """
+    try:
+        doc = Document()
+
+        # Título
+        heading = doc.add_heading(titulo, level=0)
+        heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+        # Contenido (procesar saltos de línea y viñetas)
+        lineas = contenido.split('\n')
+        for linea in lineas:
+            linea = linea.strip()
+            if not linea:
+                continue
+
+            if linea.startswith("- ") or linea.startswith("* "):
+                p = doc.add_paragraph(linea[2:], style='List Bullet')
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            elif linea.startswith("#"):
+                # Subtítulos simples
+                texto_limpio = linea.lstrip("#").strip()
+                doc.add_heading(texto_limpio, level=2)
+            else:
+                p = doc.add_paragraph(linea)
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+        filepath = resolve_path(filename, context)
+        doc.save(filepath)
+        return f"Documento Word creado con éxito: {filepath}"
+
+    except Exception as e:
+        return f"Error creando documento Word: {e}"
+
+def aplicar_formato_word(filename: str, context: str = "outputs") -> str:
+    """
+    Lee un documento de Word existente y normaliza su estilo (justificado).
+    """
+    try:
+        filepath = resolve_path(filename, context)
+        if not os.path.exists(filepath):
+            return f"Error: No se encontró el archivo {filepath}"
+
+        doc = Document(filepath)
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():
+                paragraph.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+        nuevo_nombre = os.path.splitext(filename)[0] + "_formateado.docx"
+        nuevo_filepath = resolve_path(nuevo_nombre, context)
+        doc.save(nuevo_filepath)
+
+        return f"Formato aplicado con éxito. Guardado como: {nuevo_filepath}"
+
+    except Exception as e:
+        return f"Error aplicando formato a Word: {e}"
