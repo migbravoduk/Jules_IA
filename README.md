@@ -1,58 +1,58 @@
 # Agente IA Local de Archivos (Ollama + ChatGPT Web + Office)
 
-Este proyecto es una aplicación local en Python que funciona como un agente de archivos impulsado por Inteligencia Artificial. Combina lo mejor de dos mundos:
-- **IA Local (Ollama):** Actúa como el orquestador principal, resuelve tareas sencillas (resúmenes rápidos, listar archivos) y mantiene tu privacidad.
-- **IA Externa (ChatGPT vía Selenium):** Se invoca automáticamente para tareas complejas que requieren mucho razonamiento estructurado (como generar presentaciones PowerPoint completas, informes de Word extensos o bases de datos complejas en Excel), evitando las alucinaciones típicas de los modelos locales en tareas de largo aliento.
+Este proyecto es una aplicación local en Python que funciona como un asistente inteligente de escritorio. Combina lo mejor de dos mundos para ayudarte a gestionar, crear y procesar archivos de Office y texto:
 
-Permite la manipulación avanzada de documentos de Word, Excel y PowerPoint mediante una interfaz gráfica amigable (`CustomTkinter`) y un dispatcher de IA que interpreta instrucciones en lenguaje natural.
+- **IA Local (Ollama):** Actúa como el orquestador principal. Es rápido, privado y resuelve tareas sencillas como resúmenes cortos, redacción básica y listar archivos de forma local.
+- **IA Externa (ChatGPT vía Selenium):** Se invoca automáticamente como un "Skill Avanzado" para tareas complejas que requieren de mucho razonamiento estructurado o conocimiento de internet. Esto evita las alucinaciones típicas de los modelos locales al generar bases de datos enteras (Excel), presentaciones (PowerPoint) o informes extensos (Word).
+
+Cuenta con una **interfaz gráfica amigable** (`CustomTkinter`) y un motor inteligente (`dispatcher_ia`) que interpreta tus instrucciones en lenguaje natural.
 
 ---
 
-## 1. Arquitectura del Proyecto
+## 1. Arquitectura y Seguridad (Sandbox)
 
-El proyecto está diseñado bajo una arquitectura modular, lo que garantiza extensibilidad y separación de responsabilidades. Se implementa un "sandbox" (entorno seguro) mediante la función `resolve_path()` y `BASE_DIRS` para evitar la modificación de archivos fuera de las carpetas designadas.
+El proyecto está diseñado de forma modular, lo que garantiza extensibilidad. Además, implementa un **"sandbox"** (entorno seguro) a través del archivo `sandbox.py`. El agente solo puede crear, leer y modificar archivos dentro de las carpetas permitidas (por ejemplo, `outputs/`), evitando modificaciones accidentales en tu sistema.
 
-```
+```text
 project/
 │
-├── main.py              # Lógica core, conexión con Ollama y funciones base (cmd_*)
-├── config.py            # Configuración de rutas seguras (BASE_DIRS) y URL de Ollama
-├── sandbox.py           # Resolución de rutas seguras dentro del sandbox
-├── gui.py               # Interfaz gráfica moderna con CustomTkinter
-├── requirements.txt     # Dependencias del proyecto
+├── main.py              # Lógica core, conexión con Ollama y funciones base
+├── config.py            # Rutas seguras (BASE_DIRS) y URL de Ollama
+├── sandbox.py           # Resolución de rutas (Previene Path Traversal)
+├── gui.py               # Interfaz gráfica (Ejecuta esto para empezar)
 ├── README.md            # Documentación
 │
-├── tools/               # Módulos de manipulación de archivos y orquestación
-│   ├── word_tools.py    # Funciones para crear Words (básicos y complejos desde JSON)
-│   ├── excel_tools.py   # Funciones para Excel (básicos y complejos desde JSON)
-│   ├── ppt_tools.py     # Funciones para PowerPoint (básicos y complejos desde JSON)
-│   ├── web_ai_tools.py  # Conexión con ChatGPT Web usando Selenium (El "Skill" externo)
-│   ├── ai_tools.py      # Dispatcher de IA (interpreta prompts y decide qué IA usar)
+├── tools/               # "Skills" del agente
+│   ├── word_tools.py    # Crea Words (básicos y complejos vía JSON)
+│   ├── excel_tools.py   # Crea Excels con múltiples hojas y auto-formato
+│   ├── ppt_tools.py     # Crea PowerPoint y reemplaza variables
+│   ├── web_ai_tools.py  # Conexión con ChatGPT Web usando Selenium
+│   ├── ai_tools.py      # Dispatcher: El "Cerebro" que entiende tus intenciones
 │
-├── templates/           # Directorio para plantillas de Office (Sandbox)
-├── outputs/             # Directorio principal para salida de archivos (Sandbox)
-├── temp/                # Directorio para archivos temporales (Sandbox)
+├── outputs/             # Directorio principal donde el agente guarda tus archivos
+├── templates/           # Directorio para plantillas base de Office
+├── temp/                # Directorio para archivos temporales
 ```
 
 ---
 
-## 2. Instalación (Anaconda + Pip + Ollama + Chrome)
+## 2. Instalación
 
 ### Paso 1: Instalar Ollama localmente
 1. Descarga e instala [Ollama](https://ollama.com/).
-2. Abre una terminal y descarga el modelo `llama3`:
+2. Abre una terminal y descarga el modelo por defecto (`llama3`):
    ```bash
    ollama run llama3
    ```
-   *Nota: Asegúrate de que el servicio de Ollama esté ejecutándose (por defecto en `http://localhost:11434`).*
+   *(Asegúrate de que Ollama esté ejecutándose en segundo plano, por defecto en `http://localhost:11434`)*
 
 ### Paso 2: Requisitos para IA Externa (Selenium)
-El módulo de IA Externa requiere tener el navegador **Google Chrome** instalado en tu PC, ya que Selenium abrirá una ventana para interactuar con ChatGPT en tu nombre.
-*La primera vez que uses un comando complejo, el navegador se abrirá pidiéndote iniciar sesión manualmente en ChatGPT. Solo debes hacerlo una vez, ya que guardará la sesión en un perfil de Chrome local dedicado.*
+El módulo avanzado requiere tener **Google Chrome** instalado en tu PC. Selenium abrirá una ventana limpia para interactuar con ChatGPT por ti.
+*Nota: La primera vez que pidas una tarea compleja, es posible que la consola te pida iniciar sesión manualmente en ChatGPT. Solo tendrás que hacerlo una vez; la sesión se guarda en un perfil local dedicado (`ChromeBotProfile`).*
 
 ### Paso 3: Configurar el entorno en Python
-1. Abre tu terminal o Anaconda Prompt.
-2. Crea un entorno virtual (opcional pero recomendado):
+1. Abre tu terminal (ej. Anaconda Prompt).
+2. Crea un entorno virtual (recomendado):
    ```bash
    conda create -n agente_ia python=3.11
    conda activate agente_ia
@@ -66,85 +66,76 @@ El módulo de IA Externa requiere tener el navegador **Google Chrome** instalado
 
 ## 3. Ejecución
 
-### Modo Interfaz Gráfica (GUI)
-Para abrir la interfaz amigable, ejecuta:
+Para abrir la interfaz amigable, simplemente ejecuta:
 ```bash
 python gui.py
 ```
-Desde la GUI podrás seleccionar archivos del sandbox y enviar instrucciones en lenguaje natural en la caja de texto.
-
-### Modo Script (Backend)
-Puedes importar e invocar las funciones directamente desde un script de Python:
-```python
-from tools.ai_tools import dispatcher_ia
-print(dispatcher_ia("crear ppt compleja sobre el futuro del trabajo"))
-```
+Desde allí podrás ver tus archivos y escribir en la caja de texto lo que necesitas que el agente haga.
 
 ---
 
-## 4. Ejemplos de Uso (En la GUI o vía Dispatcher)
+## 4. Ejemplos de Uso "Mágicos"
 
-El `dispatcher_ia` decide inteligentemente a qué módulo llamar.
+El `dispatcher_ia` es inteligente. Si tu instrucción es corta o básica, usará la IA Local (Ollama). **Si tu instrucción es larga (>80 caracteres), pide "investigar", crear algo "complejo" o menciona "noticias", activará automáticamente a ChatGPT.**
 
-**Comandos Locales Básicos (Usan Ollama o lógica interna):**
-- `"Muestra los archivos en la carpeta"` -> Lista el contenido de `outputs/`.
-- `"Hazme un informe en word sobre finanzas descentralizadas."` -> Genera un Word básico usando Ollama.
-- `"Escribe un tema sobre inteligencia artificial en un archivo."` -> Genera un archivo `.txt` usando Ollama.
+Además, **entiende cómo quieres llamar a los archivos** si lo pones entre comillas, e incluso añade fechas:
 
-**Comandos Complejos (Usan ChatGPT Web vía Selenium):**
-Si el agente detecta palabras como "complejo", "extenso" o explícitamente "chatgpt", delegará el trabajo "pesado" a ChatGPT para asegurar estructura y evitar alucinaciones, recibiendo la respuesta en JSON y ensamblándola en tu PC.
-- `"Crear ppt compleja sobre la historia de Roma"` -> Abre Chrome, le pide a ChatGPT la estructura JSON de la PPT, y luego arma el archivo `.pptx` diapositiva por diapositiva.
-- `"Genera un word complejo sobre el cambio climático"` -> Crea un documento extenso con títulos, subtítulos y listas basado en IA web.
-- `"Quiero un excel complejo sobre un balance financiero anual"` -> Crea un `.xlsx` con hojas separadas y datos estructurados usando IA web.
-- `"Preguntale a chatgpt cómo se hace una tarta de manzana"` -> Envía un prompt directo y te devuelve la respuesta en la consola.
+### ✨ Tareas Complejas (Se derivan a ChatGPT + Formato Office)
+- **PowerPoint estructurado:**
+  > *"Crear una ppt compleja sobre el futuro del trabajo y la inteligencia artificial."*
+- **Investigación extensa en Word con fecha y nombre:**
+  > *"Créame un word de las principales noticias del día sobre la guerra comercial entre potencias, y cómo se movieron las criptomonedas respecto a esto. Llámale al archivo 'Resumen Cripto' y añádele la fecha de hoy."*
+  *(El agente generará el archivo `Resumen_Cripto_2026-03-30.docx` usando ChatGPT y le dará formato de títulos y párrafos justificados).*
+- **Bases de datos en Excel:**
+  > *"Quiero un excel complejo sobre un balance financiero anual con ingresos y gastos en una hoja, y recursos humanos en otra. Llámale 'Balance Anual'."*
+- **Consulta directa web:**
+  > *"Pregúntale a chatgpt cómo se hace una tarta de manzana."*
+
+### ⚡ Tareas Locales Rápidas (Usan Ollama)
+- **Gestión:**
+  > *"Muestra los archivos en la carpeta"*
+- **Creación básica:**
+  > *"Hazme un informe en word sobre finanzas descentralizadas."*
+- **Resumen:**
+  > *(Selecciona un archivo en la GUI)* -> *"Resume el archivo"*
 
 ---
 
-## 5. Instructivo: Cómo agregar una nueva Función (SKILL)
+## 5. Modo Desarrollador: Cómo agregar una nueva Función (SKILL)
 
-La arquitectura modular permite que agregar nuevas habilidades sea muy fácil.
+La arquitectura permite que agregar nuevas habilidades sea muy fácil. Aquí tienes un ejemplo para crear PDFs:
 
-Supongamos que queremos agregar un skill para **Generar un Resumen Ejecutivo en PDF usando la IA Externa**.
-
-**1. Crear la herramienta en `tools/`**
-Crea (o edita) un archivo, ej. `tools/pdf_tools.py`, y define tu función pura para generar el archivo:
+**1. Crea la herramienta en `tools/`** (ej. `tools/pdf_tools.py`):
 ```python
 from sandbox import resolve_path
-# import librerias_pdf...
 
 def crear_pdf_desde_json(filename, json_data):
     filepath = resolve_path(filename)
-    # logica para armar el PDF...
+    # logica para armar el PDF usando alguna librería como reportlab...
     return f"PDF creado en {filepath}"
 ```
 
-**2. Orquestar la llamada a ChatGPT (si es complejo)**
-En `tools/ai_tools.py` (o en un nuevo archivo de comandos), crea el "comando" que usa `ask_chatgpt_web`:
+**2. Orquesta la llamada a ChatGPT** en `tools/ai_tools.py`:
 ```python
 from tools.web_ai_tools import ask_chatgpt_web, limpiar_json_de_chatgpt
 from tools.pdf_tools import crear_pdf_desde_json
 
 def cmd_crear_pdf_complejo(instruccion, filename):
-    prompt = f"Genera un resumen ejecutivo en JSON sobre: {instruccion}. Formato: {{\"titulo\": \"...\", \"cuerpo\": \"...\"}}"
-    respuesta_ia = ask_chatgpt_web(prompt)
-    if "❌ Error" in respuesta_ia: return respuesta_ia
-
-    json_limpio = limpiar_json_de_chatgpt(respuesta_ia)
-    return crear_pdf_desde_json(filename, json_limpio)
+    prompt = f"Genera un resumen en JSON sobre: {instruccion}. Formato: {{\"titulo\": \"...\", \"cuerpo\": \"...\"}}"
+    respuesta = ask_chatgpt_web(prompt)
+    if "❌ Error" in respuesta: return respuesta
+    return crear_pdf_desde_json(filename, limpiar_json_de_chatgpt(respuesta))
 ```
 
-**3. Integrarla al Dispatcher de IA (`tools/ai_tools.py`)**
-Añade la condición al `dispatcher_ia` para que el usuario pueda usarlo:
+**3. Agrégalo al Dispatcher:**
 ```python
 def dispatcher_ia(instruccion):
     instruccion_lower = instruccion.lower()
     # ... código existente ...
 
+    # NUEVO SKILL:
     elif "pdf complejo" in instruccion_lower:
-        return cmd_crear_pdf_complejo(instruccion, "nuevo_resumen.pdf")
-
-    # ...
+        nombre_limpio = obtener_nombre_seguro(instruccion, "resumen_pdf")
+        return cmd_crear_pdf_complejo(instruccion, f"{nombre_limpio}.pdf")
 ```
-
-**4. ¡Listo!**
-Ahora el usuario solo debe abrir `gui.py` y escribir: *"Haz un pdf complejo sobre la revolución industrial"*, y el agente se encargará del resto de forma autónoma.
+¡Y listo! Ya puedes pedirle al agente en la GUI: *"Haz un pdf complejo sobre la revolución industrial"*.
