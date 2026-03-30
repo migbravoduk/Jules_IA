@@ -81,7 +81,7 @@ El `dispatcher_ia` es inteligente. Si tu instrucción es corta o básica, usará
 Además, **entiende cómo quieres llamar a los archivos** si lo pones entre comillas, e incluso añade fechas:
 
 ### ✨ Tareas Complejas (Se derivan a ChatGPT + Formato Office)
-- **PowerPoint estructurado:**
+- **PowerPoint estructurado:** 
   > *"Crear una ppt compleja sobre el futuro del trabajo y la inteligencia artificial."*
 - **Investigación extensa en Word con fecha y nombre:**
   > *"Créame un word de las principales noticias del día sobre la guerra comercial entre potencias, y cómo se movieron las criptomonedas respecto a esto. Llámale al archivo 'Resumen Cripto' y añádele la fecha de hoy."*
@@ -92,11 +92,11 @@ Además, **entiende cómo quieres llamar a los archivos** si lo pones entre comi
   > *"Pregúntale a chatgpt cómo se hace una tarta de manzana."*
 
 ### ⚡ Tareas Locales Rápidas (Usan Ollama)
-- **Gestión:**
+- **Gestión:** 
   > *"Muestra los archivos en la carpeta"*
-- **Creación básica:**
+- **Creación básica:** 
   > *"Hazme un informe en word sobre finanzas descentralizadas."*
-- **Resumen:**
+- **Resumen:** 
   > *(Selecciona un archivo en la GUI)* -> *"Resume el archivo"*
 
 ---
@@ -132,7 +132,7 @@ def cmd_crear_pdf_complejo(instruccion, filename):
 def dispatcher_ia(instruccion):
     instruccion_lower = instruccion.lower()
     # ... código existente ...
-
+    
     # NUEVO SKILL:
     elif "pdf complejo" in instruccion_lower:
         nombre_limpio = obtener_nombre_seguro(instruccion, "resumen_pdf")
