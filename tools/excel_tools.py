@@ -85,3 +85,52 @@ def aplicar_formato_excel(filename: str, context: str = "outputs") -> str:
         return f"Excel formateado con éxito. Guardado como: {nuevo_filepath}"
     except Exception as e:
         return f"Error formateando Excel: {e}"
+
+import json
+def crear_excel_complejo_desde_json(filename: str, json_str: str, context: str = "outputs") -> str:
+    """
+    Crea un archivo Excel complejo a partir de un JSON estructurado de ChatGPT.
+    Estructura esperada (Lista de hojas, cada hoja tiene un nombre y filas):
+    [
+        {
+            "hoja": "Resumen Financiero",
+            "datos": [
+                ["Mes", "Ingresos", "Egresos", "Balance"],
+                ["Enero", 15000, 10000, 5000],
+                ["Febrero", 16000, 12000, 4000]
+            ]
+        },
+        ...
+    ]
+    """
+    try:
+        data = json.loads(json_str)
+        if not data:
+            return "Error: JSON vacío o mal formado."
+
+        filepath = resolve_path(filename, context)
+        wb = openpyxl.Workbook()
+
+        # Eliminar la hoja por defecto si el JSON viene con más hojas
+        if len(data) > 0:
+            default_sheet = wb.active
+            wb.remove(default_sheet)
+
+        for idx, hoja_datos in enumerate(data):
+            nombre_hoja = hoja_datos.get("hoja", f"Hoja{idx+1}")
+            filas = hoja_datos.get("datos", [])
+
+            ws = wb.create_sheet(nombre_hoja)
+            for fila in filas:
+                ws.append(fila)
+
+        wb.save(filepath)
+        # Aplicamos formato automáticamente a todas las hojas del archivo recién creado
+        aplicar_formato_excel(filename, context)
+
+        return f"Archivo Excel Complejo creado y formateado con éxito: {filepath}"
+
+    except json.JSONDecodeError as e:
+         return f"Error parseando JSON de Excel: {e}\nJSON Recibido:\n{json_str[:500]}"
+    except Exception as e:
+        return f"Error creando Excel complejo: {e}"

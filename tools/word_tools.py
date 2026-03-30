@@ -64,3 +64,48 @@ def aplicar_formato_word(filename: str, context: str = "outputs") -> str:
 
     except Exception as e:
         return f"Error aplicando formato a Word: {e}"
+
+import json
+def crear_word_complejo_desde_json(filename: str, json_str: str, context: str = "outputs") -> str:
+    """
+    Crea un documento de Word extenso a partir de un JSON estructurado de ChatGPT.
+    Estructura esperada:
+    [
+        {"tipo": "titulo", "texto": "Título Principal"},
+        {"tipo": "subtitulo", "texto": "Sección 1"},
+        {"tipo": "parrafo", "texto": "Contenido del párrafo..."},
+        {"tipo": "lista", "items": ["Punto 1", "Punto 2"]}
+    ]
+    """
+    try:
+        data = json.loads(json_str)
+        if not data:
+            return "Error: JSON vacío o mal formado."
+
+        doc = Document()
+
+        for bloque in data:
+            tipo = bloque.get("tipo", "parrafo")
+
+            if tipo == "titulo":
+                heading = doc.add_heading(bloque.get("texto", ""), level=0)
+                heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            elif tipo == "subtitulo":
+                doc.add_heading(bloque.get("texto", ""), level=2)
+            elif tipo == "lista":
+                items = bloque.get("items", [])
+                for item in items:
+                    p = doc.add_paragraph(item, style='List Bullet')
+                    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            else: # Párrafo por defecto
+                p = doc.add_paragraph(bloque.get("texto", ""))
+                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+
+        filepath = resolve_path(filename, context)
+        doc.save(filepath)
+        return f"Documento Word Complejo creado con éxito: {filepath}"
+
+    except json.JSONDecodeError as e:
+         return f"Error parseando JSON de Word: {e}\nJSON Recibido:\n{json_str[:500]}"
+    except Exception as e:
+        return f"Error creando documento Word complejo: {e}"
