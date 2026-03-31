@@ -16,3 +16,5 @@ outputs/*
 !outputs/.gitkeep
 temp/*
 !temp/.gitkeep
+inputs/*
+!inputs/.gitkeep

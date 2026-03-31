@@ -74,7 +74,8 @@ def crear_word_complejo_desde_json(filename: str, json_str: str, context: str = 
         {"tipo": "titulo", "texto": "Título Principal"},
         {"tipo": "subtitulo", "texto": "Sección 1"},
         {"tipo": "parrafo", "texto": "Contenido del párrafo..."},
-        {"tipo": "lista", "items": ["Punto 1", "Punto 2"]}
+        {"tipo": "lista", "items": ["Punto 1", "Punto 2"]},
+        {"tipo": "tabla", "filas": [["A", "B"], ["1", "2"]]}
     ]
     """
     try:
@@ -97,6 +98,32 @@ def crear_word_complejo_desde_json(filename: str, json_str: str, context: str = 
                 for item in items:
                     p = doc.add_paragraph(item, style='List Bullet')
                     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+            elif tipo == "tabla":
+                filas = bloque.get("filas", [])
+                if filas and len(filas) > 0:
+                    num_cols = len(filas[0])
+                    # Crear tabla en docx
+                    table = doc.add_table(rows=1, cols=num_cols)
+                    table.style = 'Table Grid'
+
+                    # Encabezados
+                    hdr_cells = table.rows[0].cells
+                    for i, encabezado in enumerate(filas[0]):
+                        hdr_cells[i].text = str(encabezado)
+                        # Opcional: poner encabezados en negrita
+                        for paragraph in hdr_cells[i].paragraphs:
+                            for run in paragraph.runs:
+                                run.font.bold = True
+
+                    # Datos
+                    for fila_datos in filas[1:]:
+                        row_cells = table.add_row().cells
+                        for i, valor in enumerate(fila_datos):
+                            # Evitar error si una fila tiene menos elementos que los encabezados
+                            if i < num_cols:
+                                row_cells[i].text = str(valor)
+                # Añadir un espacio después de la tabla
+                doc.add_paragraph()
             else: # Párrafo por defecto
                 p = doc.add_paragraph(bloque.get("texto", ""))
                 p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY

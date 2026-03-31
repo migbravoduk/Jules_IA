@@ -8,10 +8,36 @@ from tools.web_ai_tools import ask_chatgpt_web
 from tools.ppt_tools import crear_ppt_compleja_desde_json
 from tools.word_tools import crear_word_complejo_desde_json
 from tools.excel_tools import crear_excel_complejo_desde_json
+from main import ask_ollama # Para usar a Ollama como clasificador de intenciones
 import re
 import json
 import datetime
 import string
+
+def clasificar_intencion_con_ollama(instruccion: str) -> str:
+    """
+    Le pregunta a la IA local (Ollama) qué tipo de documento final quiere el usuario.
+    Retorna 'WORD', 'EXCEL', 'PPT', o 'DESCONOCIDO'.
+    """
+    prompt = (
+        f"Analiza la siguiente instrucción del usuario: '{instruccion}'.\n"
+        f"El usuario quiere que le generes un archivo. ¿Cuál es el formato FINAL que espera?\n"
+        f"Responde ESTRICTAMENTE con una sola palabra de esta lista: WORD, EXCEL, PPT.\n"
+        f"Si la instrucción pide 'una tabla de excel pegada en un word', el archivo final es un WORD.\n"
+        f"Si pide 'una presentación', es PPT.\n"
+        f"Si no es ninguno o es ambiguo, responde DESCONOCIDO.\n"
+        f"Respuesta:"
+    )
+    respuesta = ask_ollama(prompt)
+    if not respuesta or "Error" in respuesta:
+        return "DESCONOCIDO"
+
+    respuesta_upper = respuesta.upper()
+    if "WORD" in respuesta_upper: return "WORD"
+    if "EXCEL" in respuesta_upper: return "EXCEL"
+    if "PPT" in respuesta_upper: return "PPT"
+
+    return "DESCONOCIDO"
 
 def obtener_nombre_seguro(instruccion: str, fallback_tema: str) -> str:
     """
@@ -90,12 +116,14 @@ def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str) -> str:
         f"El usuario te pide lo siguiente: '{instruccion}'. "
         f"Genera la estructura de un documento extenso estrictamente en formato JSON, "
         f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
+        f"Si el usuario pide tablas o datos estructurados, usa el tipo 'tabla'. "
         f"Formato esperado:\n"
         f"[\n"
         f"  {{\"tipo\": \"titulo\", \"texto\": \"Título Principal\"}},\n"
         f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1\"}},\n"
         f"  {{\"tipo\": \"parrafo\", \"texto\": \"Contenido del párrafo...\"}},\n"
-        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}}\n"
+        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}},\n"
+        f"  {{\"tipo\": \"tabla\", \"filas\": [[\"Encabezado 1\", \"Encabezado 2\"], [\"Fila 1 Col 1\", \"Fila 1 Col 2\"]]}}\n"
         f"]"
     )
     respuesta = ask_chatgpt_web(prompt)
@@ -125,6 +153,45 @@ def cmd_crear_excel_complejo_con_chatgpt(instruccion: str, filename: str) -> str
     texto_json = limpiar_json_de_chatgpt(respuesta)
     return crear_excel_complejo_desde_json(filename, texto_json)
 
+def cmd_revisar_mejorar_archivo_con_chatgpt(instruccion: str, filename_origen: str) -> str:
+    """
+    Lee un archivo desde 'inputs' o 'outputs', envía su contenido a ChatGPT junto
+    con la instrucción del usuario, y crea un nuevo archivo de Word con la mejora o análisis.
+    """
+    import os
+    from main import cmd_leer
+
+    # Intentar leer desde 'inputs' primero
+    contenido = cmd_leer(filename_origen, context="inputs")
+    if contenido.startswith("Error leyendo"):
+        # Intentar desde 'outputs'
+        contenido = cmd_leer(filename_origen, context="outputs")
+        if contenido.startswith("Error leyendo"):
+             return f"No se encontró el archivo '{filename_origen}' ni en inputs ni en outputs para mejorarlo."
+
+    # Preparamos el prompt para pedir un Word estructurado
+    prompt = (
+        f"Actúa como un revisor experto. El usuario te pide lo siguiente: '{instruccion}'.\n"
+        f"Aplica esto al siguiente texto original:\n\n---\n{contenido}\n---\n\n"
+        f"Genera la respuesta estrictamente en formato JSON para crear un documento Word, "
+        f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
+        f"Formato esperado:\n"
+        f"[\n"
+        f"  {{\"tipo\": \"titulo\", \"texto\": \"Análisis o Mejora\"}},\n"
+        f"  {{\"tipo\": \"parrafo\", \"texto\": \"Contenido...\"}}\n"
+        f"]"
+    )
+
+    respuesta = ask_chatgpt_web(prompt)
+    if respuesta.startswith("❌"):
+        return respuesta
+
+    texto_json = limpiar_json_de_chatgpt(respuesta)
+
+    # Guardamos en un nuevo archivo Word indicando que es una revisión
+    nuevo_nombre = f"revision_{os.path.splitext(filename_origen)[0]}.docx"
+    return crear_word_complejo_desde_json(nuevo_nombre, texto_json)
+
 def dispatcher_ia(instruccion: str) -> str:
     """
     Dispatcher simple basado en palabras clave.
@@ -141,8 +208,18 @@ def dispatcher_ia(instruccion: str) -> str:
         "complejo", "chatgpt", "extenso", "investiga", "noticias", "detallado", "creame un"
     ])
 
+    # 1. Usar Ollama para clasificar la intención principal (¿Word, Excel o PPT?)
+    # Esto evita confusión semántica ("tabla de excel pegada en un word" -> WORD)
+    tipo_documento = clasificar_intencion_con_ollama(instruccion)
+
+    # Fallback semántico si Ollama falla o responde DESCONOCIDO
+    if tipo_documento == "DESCONOCIDO":
+        if "word" in instruccion_lower or "informe" in instruccion_lower: tipo_documento = "WORD"
+        elif "excel" in instruccion_lower: tipo_documento = "EXCEL"
+        elif "ppt" in instruccion_lower or "presentacion" in instruccion_lower or "powerpoint" in instruccion_lower: tipo_documento = "PPT"
+
     # --- WORD ---
-    if "word" in instruccion_lower or "informe" in instruccion_lower:
+    if tipo_documento == "WORD":
         tema = "Tema_general"
         match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
         if match: tema = match.group(1).strip()
@@ -154,7 +231,7 @@ def dispatcher_ia(instruccion: str) -> str:
             return cmd_crear_docx_profesional(titulo=f"Informe: {tema}", tema=tema, filename=f"{nombre_limpio}.docx")
 
     # --- EXCEL ---
-    elif "excel" in instruccion_lower:
+    elif tipo_documento == "EXCEL":
         if "formato" in instruccion_lower or "formatear" in instruccion_lower:
             return "Comando de formatear Excel detectado. Falta implementar el flujo completo de selección de archivo."
 
@@ -170,7 +247,7 @@ def dispatcher_ia(instruccion: str) -> str:
              return cmd_escribir_excel(f"{nombre_limpio}.xlsx", "Hoja1", datos)
 
     # --- POWERPOINT ---
-    elif "ppt" in instruccion_lower or "presentacion" in instruccion_lower or "powerpoint" in instruccion_lower:
+    elif tipo_documento == "PPT":
         tema = "Tema_general"
         match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
         if match: tema = match.group(1).strip()
@@ -189,9 +266,17 @@ def dispatcher_ia(instruccion: str) -> str:
         nombre_limpio = obtener_nombre_seguro(instruccion, tema)
         return cmd_crear_tema(tema, f"{nombre_limpio}.txt")
 
-    # --- RESUMIR ARCHIVO O WEB ---
-    elif "resume el archivo" in instruccion_lower or "resumir el archivo" in instruccion_lower:
-        return "Comando de resumir archivo detectado. Falta el nombre del archivo."
+    # --- REVISAR / MEJORAR / RESUMIR ARCHIVO CON CHATGPT ---
+    elif any(kw in instruccion_lower for kw in ["revisa el archivo", "mejora el archivo", "lee el archivo", "analiza el archivo", "resume el archivo", "resumir el archivo"]):
+        # Extraer posible nombre de archivo de la instrucción (ej. "lee el archivo reporte.txt y resúmelo")
+        match_archivo = re.search(r'archivo\s+([a-zA-Z0-9_.\-]+)', instruccion_lower)
+        if match_archivo:
+             nombre_archivo = match_archivo.group(1)
+             return cmd_revisar_mejorar_archivo_con_chatgpt(instruccion, nombre_archivo)
+        else:
+             return "Para revisar o mejorar un archivo debes indicar su nombre con su extensión (ej. 'revisa el archivo datos.txt'). Asegúrate de que esté en la carpeta 'inputs' o 'outputs'."
+
+    # --- RESUMIR WEB ---
     elif "resume la web" in instruccion_lower or "resumir la web" in instruccion_lower or "http" in instruccion_lower:
         match = re.search(r"(https?://\S+)", instruccion_lower)
         if match:
