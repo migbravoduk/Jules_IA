@@ -1,10 +1,13 @@
 import os
 import time
-import undetected_chromedriver as uc
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 import pyperclip
 
 def cerrar_chrome_forzado():
@@ -32,42 +35,34 @@ def ask_chatgpt_web(prompt_completo: str) -> str:
         # En Linux/Mac lo ponemos en una carpeta oculta del home
         profile_path = os.path.join(os.path.expanduser("~"), ".ChromeBotProfile")
 
-    options = uc.ChromeOptions()
-    options.add_argument(f"--user-data-dir={profile_path}")
-    # Opciones extra para evasión
-    options.add_argument("--disable-popup-blocking")
-    options.add_argument("--disable-notifications")
-    options.add_argument("--disable-dev-shm-usage")
-    options.add_argument("--no-sandbox")
+    chrome_options = Options()
+    chrome_options.add_argument(f"--user-data-dir={profile_path}")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-gpu")
+
+    # IMPORTANTE: Si se corre en servidor/docker sin interfaz gráfica real, hay que añadir --headless
+    # Como es un agente local para el PC del usuario, se espera que tenga UI (no headless por defecto)
+    # Pero lo dejamos comentado por si acaso.
+    # chrome_options.add_argument("--headless=new")
 
     driver = None
     try:
-        print("🚀 Iniciando navegador indetectable para ChatGPT Web...")
-        # undetected_chromedriver se encarga de evadir Cloudflare borrando la variable navigator.webdriver
-        driver = uc.Chrome(options=options)
+        print("🚀 Iniciando navegador para ChatGPT Web...")
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         driver.get("https://chatgpt.com/")
 
         wait = WebDriverWait(driver, 60)
 
-        # 1. Esperar caja de chat con tolerancia a CAPTCHAs y Logins
-        print("Buscando caja de chat. Si ves un control de 'Soy humano' o debes iniciar sesión, hazlo manualmente en la ventana de Chrome.")
-        text_area = None
-        intentos = 0
-        max_intentos = 60 # Esperar hasta 5 minutos (60 intentos de 5s)
-
-        while intentos < max_intentos:
-            try:
-                # Usamos una espera muy corta (1s) para no bloquear, si no está, reintentamos
-                text_area = WebDriverWait(driver, 1).until(EC.presence_of_element_located((By.ID, "prompt-textarea")))
-                break # Encontrado!
-            except:
-                intentos += 1
-                if intentos % 6 == 0:
-                     print("⏳ Aún esperando (Caja de chat no detectada). Completa el CAPTCHA o login en Chrome si es necesario...")
-                time.sleep(5)
-
-        if not text_area:
-             return "❌ Error: Se agotó el tiempo de espera (5 minutos) para encontrar la caja de chat de ChatGPT. Asegúrate de haber completado el CAPTCHA o iniciado sesión."
+        # 1. Buscar caja de chat
+        try:
+            text_area = wait.until(EC.presence_of_element_located((By.ID, "prompt-textarea")))
+        except:
+            print("\n🛑 Login requerido. Por favor inicia sesión manualmente ahora.")
+            # input bloquea la ejecución, pero como esto se corre localmente desde CLI o GUI,
+            # es la única forma de avisar al usuario para que se loguee la primera vez.
+            input("Presiona ENTER en esta consola cuando veas el chat listo en Chrome...")
+            text_area = driver.find_element(By.ID, "prompt-textarea")
 
         # 2. Enviar Prompt (Usando Portapapeles para velocidad)
         print("📋 Pegando prompt en ChatGPT...")
