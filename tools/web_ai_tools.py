@@ -18,101 +18,51 @@ def cerrar_chrome_forzado():
         pass
     time.sleep(1)
 
-def abrir_chrome_debug_mode(profile_path: str):
-    """
-    Abre el navegador Chrome nativo del usuario con el puerto de depuración 9222 abierto.
-    Este es el método más robusto contra Cloudflare porque usa el ejecutable real de Chrome
-    en un proceso separado, no administrado por el binario de webdriver.
-    """
-    import subprocess
-    import time
-    import urllib.request
-
-    # Comprobar si ya está corriendo en el puerto 9222
-    try:
-        urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=1)
-        print("✅ Chrome en modo debug ya está corriendo.")
-        return True
-    except:
-        pass
-
-    chrome_path = ""
-    if os.name == 'nt': # Windows
-        paths = [
-            r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-            r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            os.path.join(os.environ.get('LOCALAPPDATA', ''), r"Google\Chrome\Application\chrome.exe")
-        ]
-        for p in paths:
-            if os.path.exists(p):
-                chrome_path = p
-                break
-    else:
-        # En Linux/Mac, asumimos que chrome está en el PATH
-        chrome_path = "google-chrome"
-
-    if not chrome_path:
-        print("⚠️ No se encontró la ruta de Chrome nativo.")
-        return False
-
-    if os.name == 'nt':
-        cerrar_chrome_forzado()
-
-    comando = f'"{chrome_path}" --remote-debugging-port=9222 --user-data-dir="{profile_path}"'
-    print("🚀 Levantando sesión nativa de Chrome en puerto 9222...")
-    subprocess.Popen(comando, shell=True)
-    time.sleep(3) # Dar tiempo a que Chrome abra completamente
-    return True
-
 def ask_chatgpt_web(prompt_completo: str) -> str:
     """
     Lógica central de Selenium adaptada como herramienta (Skill).
     Recibe el prompt, abre ChatGPT, envía el texto y devuelve la respuesta como string.
     """
-    # Configuración de perfil dedicado
+    # En Linux o entorno headless evitamos taskkill de Windows
+    if os.name == 'nt':
+        cerrar_chrome_forzado()
+
+    # Configuración de perfil dedicado (adaptado multiplataforma)
     if os.name == 'nt':
         desktop = os.path.join(os.environ.get('USERPROFILE', ''), 'Desktop')
         profile_path = os.path.join(desktop, "ChromeBotProfile")
     else:
+        # En Linux/Mac lo ponemos en una carpeta oculta del home
         profile_path = os.path.join(os.path.expanduser("~"), ".ChromeBotProfile")
+
+    chrome_options = Options()
+    chrome_options.add_argument(f"--user-data-dir={profile_path}")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
+    chrome_options.add_argument("--disable-gpu")
+
+    # IMPORTANTE: Si se corre en servidor/docker sin interfaz gráfica real, hay que añadir --headless
+    # Como es un agente local para el PC del usuario, se espera que tenga UI (no headless por defecto)
+    # Pero lo dejamos comentado por si acaso.
+    # chrome_options.add_argument("--headless=new")
 
     driver = None
     try:
-        # Intentar conectar usando Debugging Port
-        if abrir_chrome_debug_mode(profile_path):
-            chrome_options = Options()
-            chrome_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
-            driver = webdriver.Chrome(options=chrome_options)
-        else:
-            # Fallback clásico si no pudo lanzar el debug
-            print("⚠️ Usando método clásico de webdriver...")
-            chrome_options = Options()
-            chrome_options.add_argument(f"--user-data-dir={profile_path}")
-            chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-            driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-
+        print("🚀 Iniciando navegador para ChatGPT Web...")
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
         driver.get("https://chatgpt.com/")
 
         wait = WebDriverWait(driver, 60)
 
-        # 1. Esperar caja de chat (sin blocking input) tolerando CAPTCHA manual
-        print("Buscando caja de chat. Si ves un control de 'Soy humano' o debes iniciar sesión, hazlo manualmente en la ventana de Chrome.")
-        text_area = None
-        intentos = 0
-        max_intentos = 60 # Esperar hasta 5 minutos
-
-        while intentos < max_intentos:
-            try:
-                text_area = WebDriverWait(driver, 1).until(EC.presence_of_element_located((By.ID, "prompt-textarea")))
-                break
-            except:
-                intentos += 1
-                if intentos % 5 == 0:
-                     print("⏳ Aún esperando (Caja de chat no detectada). Completa CAPTCHA/Login si es necesario...")
-                time.sleep(5)
-
-        if not text_area:
-             return "❌ Error: Se agotó el tiempo de espera (5 minutos) para encontrar la caja de ChatGPT. Asegúrate de haber resuelto el CAPTCHA."
+        # 1. Buscar caja de chat
+        try:
+            text_area = wait.until(EC.presence_of_element_located((By.ID, "prompt-textarea")))
+        except:
+            print("\n🛑 Login requerido. Por favor inicia sesión manualmente ahora.")
+            # input bloquea la ejecución, pero como esto se corre localmente desde CLI o GUI,
+            # es la única forma de avisar al usuario para que se loguee la primera vez.
+            input("Presiona ENTER en esta consola cuando veas el chat listo en Chrome...")
+            text_area = driver.find_element(By.ID, "prompt-textarea")
 
         # 2. Enviar Prompt (Usando Portapapeles para velocidad)
         print("📋 Pegando prompt en ChatGPT...")
