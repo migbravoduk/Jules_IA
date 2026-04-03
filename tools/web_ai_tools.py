@@ -1,13 +1,10 @@
 import os
 import time
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
-from selenium.webdriver.chrome.options import Options
+import undetected_chromedriver as uc
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
 import pyperclip
 
 def cerrar_chrome_forzado():
@@ -35,21 +32,19 @@ def ask_chatgpt_web(prompt_completo: str) -> str:
         # En Linux/Mac lo ponemos en una carpeta oculta del home
         profile_path = os.path.join(os.path.expanduser("~"), ".ChromeBotProfile")
 
-    chrome_options = Options()
-    chrome_options.add_argument(f"--user-data-dir={profile_path}")
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    chrome_options.add_argument("--disable-gpu")
-
-    # IMPORTANTE: Si se corre en servidor/docker sin interfaz gráfica real, hay que añadir --headless
-    # Como es un agente local para el PC del usuario, se espera que tenga UI (no headless por defecto)
-    # Pero lo dejamos comentado por si acaso.
-    # chrome_options.add_argument("--headless=new")
+    options = uc.ChromeOptions()
+    options.add_argument(f"--user-data-dir={profile_path}")
+    # Opciones extra para evasión
+    options.add_argument("--disable-popup-blocking")
+    options.add_argument("--disable-notifications")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_argument("--no-sandbox")
 
     driver = None
     try:
-        print("🚀 Iniciando navegador para ChatGPT Web...")
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
+        print("🚀 Iniciando navegador indetectable para ChatGPT Web...")
+        # undetected_chromedriver se encarga de evadir Cloudflare borrando la variable navigator.webdriver
+        driver = uc.Chrome(options=options)
         driver.get("https://chatgpt.com/")
 
         wait = WebDriverWait(driver, 60)
