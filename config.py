@@ -17,19 +17,6 @@ BASE_DIRS = {
 OLLAMA_URL = "http://localhost:11434/api/generate"
 OLLAMA_MODEL = "llama3"
 
-# Configuración de URLs de Gems Especializados de Gemini (Deep Research)
-# Reemplaza estas URLs con los enlaces directos a tus Gems personalizados en tu cuenta de Gemini Advanced.
-# Por defecto apuntan a la página de inicio normal de Gemini.
-GEMINI_GEMS = {
-    "finanzas": "https://gemini.google.com/app",
-    "fintech": "https://gemini.google.com/app",
-    "blockchain": "https://gemini.google.com/app",
-    "quantum": "https://gemini.google.com/app",
-    "riesgos": "https://gemini.google.com/app",
-    "codigo": "https://gemini.google.com/app",
-    "default": "https://gemini.google.com/app"
-}
-
 # Asegurar que los directorios base existan (Sandbox setup)
 def init_directories():
     """Crea los directorios base si no existen."""

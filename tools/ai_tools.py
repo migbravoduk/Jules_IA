@@ -72,84 +72,42 @@ def obtener_nombre_seguro(instruccion: str, fallback_tema: str) -> str:
 
     return nombre_limpio
 
-def auto_reparar_json(texto_json: str) -> str:
-    """
-    Intenta reparar un JSON que se ha cortado a la mitad por límite de tokens de la IA.
-    Busca la última llave '}' de cierre válida y asume que ahí termina el objeto,
-    luego cierra la lista de objetos principal añadiendo ']'.
-    """
-    texto_json = texto_json.strip()
-    # Si parece que está cerrado correctamente, no hacer nada
-    if texto_json.endswith("]"):
-        return texto_json
-
-    print("⚠️ Detectado JSON truncado por la IA. Intentando auto-reparar para rescatar el documento...")
-
-    # Buscar la última llave de cierre
-    last_brace = texto_json.rfind('}')
-    if last_brace != -1:
-        # Cortamos hasta la última llave válida y cerramos el array principal
-        texto_json = texto_json[:last_brace+1] + "\n]"
-
-    return texto_json
-
 def limpiar_json_de_chatgpt(respuesta: str) -> str:
-    """Limpia la respuesta de ChatGPT si viene con bloques Markdown y auto-repara cortes."""
+    """Limpia la respuesta de ChatGPT si viene con bloques Markdown de código."""
     texto_json = respuesta.strip()
     if texto_json.startswith("```json"):
         texto_json = texto_json[7:]
     elif texto_json.startswith("```"):
          texto_json = texto_json[3:]
-
     if texto_json.endswith("```"):
         texto_json = texto_json[:-3]
+    return texto_json.strip()
 
-    texto_json = texto_json.strip()
-    return auto_reparar_json(texto_json)
-
-from config import GEMINI_GEMS
-
-def obtener_gem_url(instruccion: str) -> str:
-    """Detecta la temática de la instrucción y devuelve la URL del Gem correspondiente."""
-    instruccion_lower = instruccion.lower()
-    if any(kw in instruccion_lower for kw in ["finanza", "inversion", "mercado", "pensiones"]):
-        return GEMINI_GEMS.get("finanzas", GEMINI_GEMS["default"])
-    if any(kw in instruccion_lower for kw in ["fintech", "startup", "pagos digital"]):
-        return GEMINI_GEMS.get("fintech", GEMINI_GEMS["default"])
-    if any(kw in instruccion_lower for kw in ["cripto", "blockchain", "bitcoin", "ethereum"]):
-        return GEMINI_GEMS.get("blockchain", GEMINI_GEMS["default"])
-    if any(kw in instruccion_lower for kw in ["quantum", "cuantica"]):
-        return GEMINI_GEMS.get("quantum", GEMINI_GEMS["default"])
-    if any(kw in instruccion_lower for kw in ["riesgo", "amenaza", "compliance"]):
-        return GEMINI_GEMS.get("riesgos", GEMINI_GEMS["default"])
-    if any(kw in instruccion_lower for kw in ["codigo", "programacion", "python", "script"]):
-        return GEMINI_GEMS.get("codigo", GEMINI_GEMS["default"])
-    return GEMINI_GEMS["default"]
-
-def enviar_a_ia_externa(prompt: str, motor: str, instruccion: str = "") -> str:
-    """Envía el prompt a ChatGPT o Gemini (seleccionando el Gem adecuado) según el motor."""
+def enviar_a_ia_externa(prompt: str, motor: str) -> str:
+    """Envía el prompt a ChatGPT o Gemini según el motor seleccionado."""
     if motor == "gemini":
-        gem_url = obtener_gem_url(instruccion)
-        return ask_gemini_web(prompt, gem_url=gem_url)
+        return ask_gemini_web(prompt)
     return ask_chatgpt_web(prompt)
 
 def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
     """Orquesta la creación de una PPT compleja usando IA Externa."""
     prompt = (
-        f"Actúa como un investigador nivel 'Deep Research'. "
-        f"Instrucción: '{instruccion}'.\n"
-        f"Genera una presentación exhaustiva. Usa datos profundos. "
-        f"NO GENERES texto explicativo antes ni después, SOLO JSON.\n"
+        f"Actúa como un investigador y diseñador experto de nivel 'NotebookLM'. "
+        f"Tu objetivo es crear una presentación exhaustiva y sofisticada basada en esta instrucción: '{instruccion}'.\n"
+        f"La presentación debe ser larga, detallada y estructurada para una audiencia ejecutiva o académica.\n"
+        f"Usa datos profundos. El JSON debe ser un array de objetos.\n"
+        f"El primer objeto debe ser tipo portada. Luego incluye un tipo 'indice', y los demás tipo 'contenido' o 'cita'.\n"
+        f"Genera la respuesta estrictamente en formato JSON, sin texto fuera del JSON.\n"
         f"Formato esperado:\n"
         f"[\n"
         f"  {{\"tipo\": \"portada\", \"titulo\": \"...\", \"subtitulo\": \"...\"}},\n"
-        f"  {{\"tipo\": \"indice\", \"titulo\": \"Índice\", \"viñetas\": [\"...\"]}},\n"
-        f"  {{\"tipo\": \"cita\", \"texto\": \"Insight clave\"}},\n"
-        f"  {{\"tipo\": \"contenido\", \"titulo\": \"...\", \"viñetas\": [\"Dato 1\", \"Dato 2\"]}}\n"
+        f"  {{\"tipo\": \"indice\", \"titulo\": \"Índice de Contenidos\", \"viñetas\": [\"1. Tema\", \"2. Tema\"]}},\n"
+        f"  {{\"tipo\": \"cita\", \"texto\": \"Una frase inspiradora o cita clave relacionada al tema\"}},\n"
+        f"  {{\"tipo\": \"contenido\", \"titulo\": \"...\", \"viñetas\": [\"Dato analítico 1\", \"Dato analítico 2\"]}}\n"
         f"]"
     )
 
-    respuesta = enviar_a_ia_externa(prompt, motor, instruccion)
+    respuesta = enviar_a_ia_externa(prompt, motor)
     if respuesta.startswith("❌"):
         return respuesta
 
@@ -159,22 +117,26 @@ def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: s
 def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
     """Orquesta la creación de un Word complejo usando IA Externa."""
     prompt = (
-        f"Actúa como un investigador experto nivel 'Deep Research'.\n"
-        f"Instrucción: '{instruccion}'.\n"
-        f"Genera un informe MUY PROFUNDO. NO GENERES NINGÚN TEXTO FUERA DEL JSON. "
-        f"Si la respuesta es muy larga, maximiza la densidad de información.\n"
-        f"Tipos de bloque soportados: 'titulo', 'subtitulo', 'cita', 'parrafo', 'lista', 'tabla'.\n"
-        f"Esquema JSON estricto:\n"
+        f"Actúa como un investigador experto creando un documento de estudio avanzado tipo 'NotebookLM'.\n"
+        f"El usuario pide lo siguiente: '{instruccion}'.\n"
+        f"Genera un informe MUY EXTENSO, profundo y analítico. Debe incluir:\n"
+        f"- Título Principal (tipo 'titulo')\n"
+        f"- Múltiples Subtítulos para dividir el análisis (tipo 'subtitulo')\n"
+        f"- Citas clave o 'takeaways' (tipo 'cita')\n"
+        f"- Explicaciones detalladas en párrafos profundos (tipo 'parrafo')\n"
+        f"- Listas de puntos clave estructurados (tipo 'lista')\n"
+        f"- Si se requieren datos comparativos, usa tipo 'tabla'.\n"
+        f"Genera esto estrictamente en formato JSON puro. Ejemplo de esquema:\n"
         f"[\n"
         f"  {{\"tipo\": \"titulo\", \"texto\": \"Título\"}},\n"
-        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1\"}},\n"
-        f"  {{\"tipo\": \"cita\", \"texto\": \"Insight clave\"}},\n"
+        f"  {{\"tipo\": \"cita\", \"texto\": \"Frase destacada o Insight clave\"}},\n"
+        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1: Contexto\"}},\n"
         f"  {{\"tipo\": \"parrafo\", \"texto\": \"Análisis extenso...\"}},\n"
-        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}},\n"
+        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto detallado 1\", \"Punto detallado 2\"]}},\n"
         f"  {{\"tipo\": \"tabla\", \"filas\": [[\"A\", \"B\"], [\"1\", \"2\"]]}}\n"
         f"]"
     )
-    respuesta = enviar_a_ia_externa(prompt, motor, instruccion)
+    respuesta = enviar_a_ia_externa(prompt, motor)
     if respuesta.startswith("❌"):
         return respuesta
     texto_json = limpiar_json_de_chatgpt(respuesta)

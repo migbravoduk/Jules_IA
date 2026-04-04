@@ -173,8 +173,8 @@ def ask_chatgpt_web(prompt_completo: str) -> str:
     finally:
         if driver: driver.quit()
 
-def ask_gemini_web(prompt_completo: str, gem_url: str = "https://gemini.google.com/app") -> str:
-    """Abre Gemini (o un Gem específico), envía el texto y devuelve la respuesta."""
+def ask_gemini_web(prompt_completo: str) -> str:
+    """Abre Gemini, envía el texto y devuelve la respuesta."""
     if os.name == 'nt':
         desktop = os.path.join(os.environ.get('USERPROFILE', ''), 'Desktop')
         profile_path = os.path.join(desktop, "ChromeBotProfile")
@@ -190,7 +190,7 @@ def ask_gemini_web(prompt_completo: str, gem_url: str = "https://gemini.google.c
         # Usaremos la etiqueta rich-textarea o div con aria-label "Introduce una petición aquí"
         return enviar_prompt_generico(
             driver, wait, prompt_completo,
-            url=gem_url,
+            url="https://gemini.google.com/app",
             selector_caja=By.CSS_SELECTOR,
             valor_caja="rich-textarea div p", # Selector típico del input de Gemini
             selector_respuesta_css="message-content", # Gemini usa la etiqueta <message-content>
