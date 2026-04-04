@@ -106,26 +106,37 @@ def crear_ppt_compleja_desde_json(filename: str, json_str: str, context: str = "
             titulo = slide_data.get("titulo", "")
 
             if tipo == "portada":
-                layout = prs.slide_layouts[0]
+                layout = prs.slide_layouts[0] # Titulo + Subtitulo
                 slide = prs.slides.add_slide(layout)
                 slide.shapes.title.text = titulo
                 if "subtitulo" in slide_data and len(slide.placeholders) > 1:
                     slide.placeholders[1].text = slide_data["subtitulo"]
+            elif tipo == "cita":
+                # Diseño visual de cita: Layout de solo título centrado o Título principal
+                layout = prs.slide_layouts[2] # Header de sección
+                slide = prs.slides.add_slide(layout)
+                slide.shapes.title.text = slide_data.get("texto", titulo)
             else:
-                layout = prs.slide_layouts[1]
+                # Contenido o Indice normal
+                layout = prs.slide_layouts[1] # Titulo + Viñetas
                 slide = prs.slides.add_slide(layout)
                 slide.shapes.title.text = titulo
 
                 viñetas = slide_data.get("viñetas", [])
                 if viñetas and len(slide.placeholders) > 1:
                     tf = slide.placeholders[1].text_frame
+                    # Ajuste para evitar aglomeraciones:
+                    tf.word_wrap = True
+                    from pptx.util import Pt
                     for idx, viñeta in enumerate(viñetas):
                         if idx == 0:
                             tf.text = viñeta
+                            tf.paragraphs[0].space_after = Pt(10)
                         else:
                             p = tf.add_paragraph()
                             p.text = viñeta
                             p.level = 0
+                            p.space_after = Pt(10) # Espaciado más profesional entre viñetas
 
         prs.save(filepath)
         return f"PPT Complejo creado con éxito: {filepath}"

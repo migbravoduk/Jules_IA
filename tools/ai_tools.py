@@ -4,7 +4,7 @@ from main import (
     cmd_crear_docx_profesional, cmd_escribir_excel,
     cmd_formatear_excel, cmd_actualizar_ppt
 )
-from tools.web_ai_tools import ask_chatgpt_web
+from tools.web_ai_tools import ask_chatgpt_web, ask_gemini_web
 from tools.ppt_tools import crear_ppt_compleja_desde_json
 from tools.word_tools import crear_word_complejo_desde_json
 from tools.excel_tools import crear_excel_complejo_desde_json
@@ -83,50 +83,60 @@ def limpiar_json_de_chatgpt(respuesta: str) -> str:
         texto_json = texto_json[:-3]
     return texto_json.strip()
 
-def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str) -> str:
-    """Orquesta la creación de una PPT compleja usando ChatGPT vía Selenium."""
+def enviar_a_ia_externa(prompt: str, motor: str) -> str:
+    """Envía el prompt a ChatGPT o Gemini según el motor seleccionado."""
+    if motor == "gemini":
+        return ask_gemini_web(prompt)
+    return ask_chatgpt_web(prompt)
+
+def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
+    """Orquesta la creación de una PPT compleja usando IA Externa."""
     prompt = (
-        f"Actúa como un experto creador de presentaciones profesionales. "
-        f"El usuario te pide lo siguiente: '{instruccion}'. "
-        f"Genera la estructura de la presentación estrictamente en formato JSON, "
-        f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
-        f"El JSON debe ser un array de objetos. El primer objeto debe ser tipo portada, los demás tipo contenido. "
+        f"Actúa como un investigador y diseñador experto de nivel 'NotebookLM'. "
+        f"Tu objetivo es crear una presentación exhaustiva y sofisticada basada en esta instrucción: '{instruccion}'.\n"
+        f"La presentación debe ser larga, detallada y estructurada para una audiencia ejecutiva o académica.\n"
+        f"Usa datos profundos. El JSON debe ser un array de objetos.\n"
+        f"El primer objeto debe ser tipo portada. Luego incluye un tipo 'indice', y los demás tipo 'contenido' o 'cita'.\n"
+        f"Genera la respuesta estrictamente en formato JSON, sin texto fuera del JSON.\n"
         f"Formato esperado:\n"
         f"[\n"
         f"  {{\"tipo\": \"portada\", \"titulo\": \"...\", \"subtitulo\": \"...\"}},\n"
-        f"  {{\"tipo\": \"contenido\", \"titulo\": \"...\", \"viñetas\": [\"...\", \"...\"]}}\n"
+        f"  {{\"tipo\": \"indice\", \"titulo\": \"Índice de Contenidos\", \"viñetas\": [\"1. Tema\", \"2. Tema\"]}},\n"
+        f"  {{\"tipo\": \"cita\", \"texto\": \"Una frase inspiradora o cita clave relacionada al tema\"}},\n"
+        f"  {{\"tipo\": \"contenido\", \"titulo\": \"...\", \"viñetas\": [\"Dato analítico 1\", \"Dato analítico 2\"]}}\n"
         f"]"
     )
 
-    # 1. Llamar a ChatGPT
-    respuesta = ask_chatgpt_web(prompt)
+    respuesta = enviar_a_ia_externa(prompt, motor)
     if respuesta.startswith("❌"):
         return respuesta
 
-    # 2. Limpiar respuesta
     texto_json = limpiar_json_de_chatgpt(respuesta)
-
-    # 3. Crear PPT
     return crear_ppt_compleja_desde_json(filename, texto_json)
 
-def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str) -> str:
-    """Orquesta la creación de un Word complejo usando ChatGPT vía Selenium."""
+def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
+    """Orquesta la creación de un Word complejo usando IA Externa."""
     prompt = (
-        f"Actúa como un experto redactor de informes profesionales. "
-        f"El usuario te pide lo siguiente: '{instruccion}'. "
-        f"Genera la estructura de un documento extenso estrictamente en formato JSON, "
-        f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
-        f"Si el usuario pide tablas o datos estructurados, usa el tipo 'tabla'. "
-        f"Formato esperado:\n"
+        f"Actúa como un investigador experto creando un documento de estudio avanzado tipo 'NotebookLM'.\n"
+        f"El usuario pide lo siguiente: '{instruccion}'.\n"
+        f"Genera un informe MUY EXTENSO, profundo y analítico. Debe incluir:\n"
+        f"- Título Principal (tipo 'titulo')\n"
+        f"- Múltiples Subtítulos para dividir el análisis (tipo 'subtitulo')\n"
+        f"- Citas clave o 'takeaways' (tipo 'cita')\n"
+        f"- Explicaciones detalladas en párrafos profundos (tipo 'parrafo')\n"
+        f"- Listas de puntos clave estructurados (tipo 'lista')\n"
+        f"- Si se requieren datos comparativos, usa tipo 'tabla'.\n"
+        f"Genera esto estrictamente en formato JSON puro. Ejemplo de esquema:\n"
         f"[\n"
-        f"  {{\"tipo\": \"titulo\", \"texto\": \"Título Principal\"}},\n"
-        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1\"}},\n"
-        f"  {{\"tipo\": \"parrafo\", \"texto\": \"Contenido del párrafo...\"}},\n"
-        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}},\n"
-        f"  {{\"tipo\": \"tabla\", \"filas\": [[\"Encabezado 1\", \"Encabezado 2\"], [\"Fila 1 Col 1\", \"Fila 1 Col 2\"]]}}\n"
+        f"  {{\"tipo\": \"titulo\", \"texto\": \"Título\"}},\n"
+        f"  {{\"tipo\": \"cita\", \"texto\": \"Frase destacada o Insight clave\"}},\n"
+        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1: Contexto\"}},\n"
+        f"  {{\"tipo\": \"parrafo\", \"texto\": \"Análisis extenso...\"}},\n"
+        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto detallado 1\", \"Punto detallado 2\"]}},\n"
+        f"  {{\"tipo\": \"tabla\", \"filas\": [[\"A\", \"B\"], [\"1\", \"2\"]]}}\n"
         f"]"
     )
-    respuesta = ask_chatgpt_web(prompt)
+    respuesta = enviar_a_ia_externa(prompt, motor)
     if respuesta.startswith("❌"):
         return respuesta
     texto_json = limpiar_json_de_chatgpt(respuesta)
@@ -205,8 +215,10 @@ def dispatcher_ia(instruccion: str) -> str:
 
     # Variables de complejidad: si la instrucción tiene más de 80 caracteres o palabras clave "fuertes".
     es_complejo = len(instruccion) > 80 or any(kw in instruccion_lower for kw in [
-        "complejo", "chatgpt", "extenso", "investiga", "noticias", "detallado", "creame un"
+        "complejo", "chatgpt", "gemini", "extenso", "investiga", "noticias", "detallado", "creame un"
     ])
+
+    motor_ia = "gemini" if "gemini" in instruccion_lower else "chatgpt"
 
     # 1. Usar Ollama para clasificar la intención principal (¿Word, Excel o PPT?)
     # Esto evita confusión semántica ("tabla de excel pegada en un word" -> WORD)
@@ -226,7 +238,7 @@ def dispatcher_ia(instruccion: str) -> str:
         nombre_limpio = obtener_nombre_seguro(instruccion, tema)
 
         if es_complejo:
-            return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx")
+            return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
         else:
             return cmd_crear_docx_profesional(titulo=f"Informe: {tema}", tema=tema, filename=f"{nombre_limpio}.docx")
 
@@ -241,7 +253,7 @@ def dispatcher_ia(instruccion: str) -> str:
         nombre_limpio = obtener_nombre_seguro(instruccion, tema)
 
         if es_complejo:
-            return cmd_crear_excel_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.xlsx")
+            return cmd_crear_excel_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.xlsx") # Solo soportado en ChatGPT por ahora
         else:
              datos = [["Nombre", "Valor"], ["Dato A", 10], ["Dato B", 20]]
              return cmd_escribir_excel(f"{nombre_limpio}.xlsx", "Hoja1", datos)
@@ -254,7 +266,7 @@ def dispatcher_ia(instruccion: str) -> str:
         nombre_limpio = obtener_nombre_seguro(instruccion, tema)
 
         if es_complejo:
-            return cmd_crear_ppt_compleja_con_chatgpt(instruccion, f"{nombre_limpio}.pptx")
+            return cmd_crear_ppt_compleja_con_chatgpt(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
         else:
             return "Comando de actualizar PPT detectado. Falta el diccionario de reemplazos."
 

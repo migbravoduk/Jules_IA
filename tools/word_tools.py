@@ -92,9 +92,14 @@ def crear_word_complejo_desde_json(filename: str, json_str: str, context: str = 
                 heading = doc.add_heading(bloque.get("texto", ""), level=0)
                 heading.alignment = WD_ALIGN_PARAGRAPH.CENTER
             elif tipo == "subtitulo":
-                doc.add_heading(bloque.get("texto", ""), level=2)
-            elif tipo == "lista":
-                items = bloque.get("items", [])
+                heading = doc.add_heading(bloque.get("texto", ""), level=1) # Más jerarquía
+                heading.style.font.bold = True
+            elif tipo == "cita":
+                # Uso de estilo Quote intenso para emular NotebookLM
+                p = doc.add_paragraph(bloque.get("texto", ""), style='Intense Quote')
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            elif tipo == "lista" or tipo == "indice":
+                items = bloque.get("items", bloque.get("viñetas", [])) # Soporta lista o indice
                 for item in items:
                     p = doc.add_paragraph(item, style='List Bullet')
                     p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
