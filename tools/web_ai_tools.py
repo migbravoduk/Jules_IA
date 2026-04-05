@@ -10,198 +10,293 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import pyperclip
 
-def cerrar_chrome_forzado():
-    """Mata procesos de Chrome para liberar el perfil."""
+# ---------------------------------------------------------------------------
+# Utilidades de Chrome
+# ---------------------------------------------------------------------------
+
+def _get_profile_path() -> str:
+    """Retorna la ruta del perfil dedicado de Chrome para el bot."""
+    if os.name == 'nt':
+        desktop = os.path.join(os.environ.get('USERPROFILE', ''), 'Desktop')
+    else:
+        desktop = os.path.expanduser("~")
+    return os.path.join(desktop, "ChromeBotProfile")
+
+def _cerrar_chrome_forzado():
+    """Mata todos los procesos de Chrome en Windows para liberar el perfil."""
     try:
         os.system("taskkill /f /im chrome.exe /T >nul 2>&1")
     except:
         pass
     time.sleep(1)
 
-def abrir_chrome_debug_mode(profile_path: str):
+def _abrir_chrome_debug_mode(profile_path: str) -> bool:
     """
-    Abre el navegador Chrome nativo del usuario con el puerto de depuración 9222 abierto.
-    Este es el método más robusto contra Cloudflare porque usa el ejecutable real de Chrome
-    en un proceso separado, no administrado por el binario de webdriver.
+    Lanza Chrome nativo con el puerto de depuracion 9222 activado.
+    Este metodo es el mas robusto contra Cloudflare porque usa el ejecutable
+    real de Chrome en un proceso separado al de webdriver.
     """
     import subprocess
-    import time
     import urllib.request
 
-    # Comprobar si ya está corriendo en el puerto 9222
+    # 1. Verificar si ya esta corriendo en el puerto 9222
     try:
         urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=1)
-        print("✅ Chrome en modo debug ya está corriendo.")
+        print("Chrome en modo debug ya esta corriendo.")
         return True
     except:
         pass
 
+    # 2. Buscar el ejecutable de Chrome
     chrome_path = ""
-    if os.name == 'nt': # Windows
-        paths = [
+    if os.name == 'nt':
+        candidatos = [
             r"C:\Program Files\Google\Chrome\Application\chrome.exe",
             r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-            os.path.join(os.environ.get('LOCALAPPDATA', ''), r"Google\Chrome\Application\chrome.exe")
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), r"Google\Chrome\Application\chrome.exe"),
         ]
-        for p in paths:
+        for p in candidatos:
             if os.path.exists(p):
                 chrome_path = p
                 break
     else:
-        # En Linux/Mac, asumimos que chrome está en el PATH
         chrome_path = "google-chrome"
 
     if not chrome_path:
-        print("⚠️ No se encontró la ruta de Chrome nativo.")
+        print("No se encontro la ruta de Chrome nativo.")
         return False
 
+    # 3. Cerrar instancias huerfanas y levantar Chrome nuevo
     if os.name == 'nt':
-        cerrar_chrome_forzado()
+        _cerrar_chrome_forzado()
 
     comando = f'"{chrome_path}" --remote-debugging-port=9222 --user-data-dir="{profile_path}"'
-    print("🚀 Levantando sesión nativa de Chrome en puerto 9222...")
+    print("Levantando sesion nativa de Chrome en puerto 9222...")
     subprocess.Popen(comando, shell=True)
-    time.sleep(3) # Dar tiempo a que Chrome abra completamente
+    time.sleep(4)
     return True
 
-def enviar_prompt_generico(driver, wait, prompt_completo: str, url: str, selector_caja: By, valor_caja: str, selector_respuesta_css: str, nombre_ia: str) -> str:
-    """
-    Función base para interactuar tanto con ChatGPT como con Gemini.
-    """
-    driver.get(url)
+def _crear_driver(profile_path: str):
+    """Crea y retorna un objeto WebDriver conectado a la sesion nativa."""
+    if _abrir_chrome_debug_mode(profile_path):
+        opts = Options()
+        opts.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+        return webdriver.Chrome(options=opts)
+    else:
+        print("Usando metodo clasico de webdriver...")
+        opts = Options()
+        opts.add_argument(f"--user-data-dir={profile_path}")
+        opts.add_argument("--disable-blink-features=AutomationControlled")
+        return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=opts)
 
-    # 1. Esperar caja de chat tolerando CAPTCHAs/Logins
-    print(f"Buscando caja de chat en {nombre_ia}. Si ves un control o login, hazlo manualmente en la ventana de Chrome.")
-    text_area = None
-    intentos = 0
-    max_intentos = 60 # Esperar hasta 5 minutos
+# ---------------------------------------------------------------------------
+# Singleton del WebDriver
+# ---------------------------------------------------------------------------
+_shared_driver = None
 
-    while intentos < max_intentos:
+def _obtener_driver():
+    """
+    Retorna el driver compartido, creando uno nuevo si no existe o si la
+    sesion anterior murio (p.ej. el usuario cerro Chrome manualmente).
+    """
+    global _shared_driver
+    profile_path = _get_profile_path()
+
+    if _shared_driver is not None:
         try:
-            text_area = WebDriverWait(driver, 1).until(EC.presence_of_element_located((selector_caja, valor_caja)))
+            _ = _shared_driver.title
+        except Exception:
+            print("La sesion de Chrome anterior expiro. Reiniciando...")
+            _shared_driver = None
+
+    if _shared_driver is None:
+        _shared_driver = _crear_driver(profile_path)
+
+    # Enfocar una pestana visible (no de extensiones ni devtools)
+    try:
+        for handle in _shared_driver.window_handles:
+            _shared_driver.switch_to.window(handle)
+            url_actual = _shared_driver.current_url
+            if not url_actual.startswith("chrome-extension://") and "devtools://" not in url_actual:
+                break
+    except Exception as e:
+        print(f"No se pudo seleccionar pestana valida: {e}")
+
+    return _shared_driver
+
+def _invalidar_driver():
+    """Fuerza que en la proxima llamada se cree un driver nuevo."""
+    global _shared_driver
+    _shared_driver = None
+
+# ---------------------------------------------------------------------------
+# Motor generico de interaccion con cualquier IA web
+# ---------------------------------------------------------------------------
+
+def _enviar_prompt(
+    driver,
+    prompt: str,
+    url: str,
+    nombre_ia: str,
+    selector_caja_by: By,
+    selector_caja_valor: str,
+    selector_respuesta_css: str,
+    selector_boton_enviar: str = None,
+    timeout_espera_caja: int = 60,
+    timeout_respuesta: int = 180,
+) -> str:
+    """Motor universal: navega, pega el prompt y lee la respuesta."""
+
+    # 1. Navegar SIEMPRE a la URL de destino (incondicional)
+    print(f"Navegando hacia {nombre_ia}: {url}")
+    try:
+        driver.maximize_window()
+    except:
+        pass
+    driver.get(url)
+    time.sleep(3)
+
+    # 2. Esperar la caja de texto
+    print(f"Buscando caja de texto en {nombre_ia}. Si ves un login o pop-up, completalo manualmente.")
+    text_area = None
+    deadline = time.time() + timeout_espera_caja
+
+    while time.time() < deadline:
+        try:
+            text_area = WebDriverWait(driver, 2).until(
+                EC.element_to_be_clickable((selector_caja_by, selector_caja_valor))
+            )
             break
         except:
-            intentos += 1
-            if intentos % 5 == 0:
-                 print(f"⏳ Aún esperando (Caja de chat de {nombre_ia} no detectada). Completa login si es necesario...")
-            time.sleep(5)
+            tiempo_restante = int(deadline - time.time())
+            if tiempo_restante % 10 == 0:
+                print(f"Esperando caja de {nombre_ia}... ({tiempo_restante}s restantes)")
+            time.sleep(1)
 
     if not text_area:
-         return f"❌ Error: Se agotó el tiempo de espera (5 minutos) para encontrar la caja de {nombre_ia}."
+        return f"Error: No se encontro la caja de chat de {nombre_ia} en {timeout_espera_caja}s. Hay un pop-up o login bloqueando?"
 
-    # 2. Enviar Prompt (Usando Portapapeles para velocidad)
-    print(f"📋 Pegando prompt en {nombre_ia}...")
-    pyperclip.copy(prompt_completo)
-    text_area.click()
-    time.sleep(0.5)
-    control_key = Keys.COMMAND if os.name == 'posix' and 'darwin' in os.uname().sysname.lower() else Keys.CONTROL
-    text_area.send_keys(control_key, 'v')
-    time.sleep(1)
-    text_area.send_keys(Keys.ENTER)
+    # 3. Pegar el prompt
+    print(f"Pegando prompt en {nombre_ia}...")
+    pyperclip.copy(prompt)
+    try:
+        text_area.click()
+    except:
+        driver.execute_script("arguments[0].focus();", text_area)
+    time.sleep(0.4)
 
-    # 3. Esperar respuesta
-    print(f"⏳ Esperando respuesta de {nombre_ia} (esto puede tomar un minuto)...")
-    wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector_respuesta_css)))
+    ctrl = Keys.COMMAND if (os.name == 'posix' and 'darwin' in os.uname().sysname.lower()) else Keys.CONTROL
+    try:
+        text_area.send_keys(ctrl, 'v')
+    except Exception:
+        print("send_keys fallo, inyectando texto via JS...")
+        safe = prompt.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
+        driver.execute_script("""
+            arguments[0].focus();
+            document.execCommand('insertText', false, arguments[1]);
+        """, text_area, safe)
+    time.sleep(0.8)
+
+    # 4. Enviar el prompt
+    if selector_boton_enviar:
+        try:
+            print("Buscando boton de enviar...")
+            boton = WebDriverWait(driver, 6).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, selector_boton_enviar))
+            )
+            driver.execute_script("arguments[0].click();", boton)
+            print("Boton de enviar presionado.")
+        except Exception:
+            print("Boton no encontrado, usando Enter como respaldo.")
+            try:
+                text_area.send_keys(Keys.ENTER)
+            except:
+                pass
+    else:
+        try:
+            text_area.send_keys(Keys.ENTER)
+        except:
+            pass
+
+    time.sleep(2)
+
+    # 5. Esperar y leer la respuesta
+    print(f"Esperando respuesta de {nombre_ia}...")
+    try:
+        WebDriverWait(driver, timeout_respuesta).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, selector_respuesta_css))
+        )
+    except Exception:
+        return f"Error: {nombre_ia} no dio respuesta en {timeout_respuesta}s."
 
     stable_count = 0
     last_len = 0
-
-    # Verificamos cada 2 segundos, necesitamos 3 aciertos (6 segundos total de silencio)
-    for _ in range(120):
-        respuestas = driver.find_elements(By.CSS_SELECTOR, selector_respuesta_css)
-        if not respuestas:
-            time.sleep(1); continue
-
-        texto = respuestas[-1].text
-        current_len = len(texto)
-
-        if current_len == last_len and current_len > 15: # >15 para asegurar que no es texto de carga vacío
+    for _ in range(150):
+        bloques = driver.find_elements(By.CSS_SELECTOR, selector_respuesta_css)
+        if not bloques:
+            time.sleep(1)
+            continue
+        texto = bloques[-1].text
+        cur_len = len(texto)
+        if cur_len == last_len and cur_len > 15:
             stable_count += 1
         else:
             stable_count = 0
-            last_len = current_len
-
-        print(f"Generando... {current_len} caracteres (Estabilidad: {stable_count}/3)", end="\r")
-
+            last_len = cur_len
+        print(f"Generando... {cur_len} chars (estabilidad {stable_count}/3)", end="\r")
         if stable_count >= 3:
             break
-
         time.sleep(2)
 
-    final_text = respuestas[-1].text
-    print(f"\n✅ Respuesta de {nombre_ia} completada. ({len(final_text)} caracteres).")
+    respuesta_final = driver.find_elements(By.CSS_SELECTOR, selector_respuesta_css)[-1].text
+    print(f"\nRespuesta de {nombre_ia} recibida ({len(respuesta_final)} chars).")
+    return respuesta_final
 
-    return final_text
+# ---------------------------------------------------------------------------
+# Funciones publicas por IA
+# ---------------------------------------------------------------------------
 
-def inicializar_driver_con_debug(profile_path: str):
-    """Inicializa y retorna el driver conectándose a Chrome."""
-    driver = None
-    if abrir_chrome_debug_mode(profile_path):
-        chrome_options = Options()
-        chrome_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
-        driver = webdriver.Chrome(options=chrome_options)
-    else:
-        print("⚠️ Usando método clásico de webdriver...")
-        chrome_options = Options()
-        chrome_options.add_argument(f"--user-data-dir={profile_path}")
-        chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=chrome_options)
-    return driver
-
-def ask_chatgpt_web(prompt_completo: str) -> str:
-    """Abre ChatGPT, envía el texto y devuelve la respuesta."""
-    # Configuración de perfil dedicado
-    if os.name == 'nt':
-        desktop = os.path.join(os.environ.get('USERPROFILE', ''), 'Desktop')
-        profile_path = os.path.join(desktop, "ChromeBotProfile")
-    else:
-        profile_path = os.path.join(os.path.expanduser("~"), ".ChromeBotProfile")
-
+def ask_chatgpt_web(prompt: str) -> str:
+    """Envia un prompt a ChatGPT y devuelve la respuesta en texto."""
     try:
-        driver = inicializar_driver_con_debug(profile_path)
-        wait = WebDriverWait(driver, 60)
-        return enviar_prompt_generico(
-            driver, wait, prompt_completo,
-            url="https://chatgpt.com/",
-            selector_caja=By.ID,
-            valor_caja="prompt-textarea",
+        driver = _obtener_driver()
+        return _enviar_prompt(
+            driver=driver,
+            prompt=prompt,
+            url="https://chatgpt.com/?model=auto",
+            nombre_ia="ChatGPT",
+            selector_caja_by=By.ID,
+            selector_caja_valor="prompt-textarea",
             selector_respuesta_css="div[data-message-author-role='assistant']",
-            nombre_ia="ChatGPT"
+            selector_boton_enviar="button[data-testid='send-button']",
         )
     except Exception as e:
-        return f"❌ Error ejecutando ChatGPT Web: {str(e)}"
-    finally:
-        if driver: driver.quit()
+        print(f"Error ChatGPT: {e}")
+        _invalidar_driver()
+        return f"Error ejecutando ChatGPT Web: {e}"
 
-def ask_gemini_web(prompt_completo: str) -> str:
-    """Abre Gemini, envía el texto y devuelve la respuesta."""
-    if os.name == 'nt':
-        desktop = os.path.join(os.environ.get('USERPROFILE', ''), 'Desktop')
-        profile_path = os.path.join(desktop, "ChromeBotProfile")
-    else:
-        profile_path = os.path.join(os.path.expanduser("~"), ".ChromeBotProfile")
-
-    driver = None
+def ask_gemini_web(prompt: str) -> str:
+    """Envia un prompt a Gemini y devuelve la respuesta en texto."""
     try:
-        driver = inicializar_driver_con_debug(profile_path)
-        wait = WebDriverWait(driver, 60)
-
-        # En Gemini la caja de texto tiene clase 'ql-editor' o se ubica por css '.ql-editor textarea'
-        # Usaremos la etiqueta rich-textarea o div con aria-label "Introduce una petición aquí"
-        return enviar_prompt_generico(
-            driver, wait, prompt_completo,
+        driver = _obtener_driver()
+        return _enviar_prompt(
+            driver=driver,
+            prompt=prompt,
             url="https://gemini.google.com/app",
-            selector_caja=By.CSS_SELECTOR,
-            valor_caja="rich-textarea div p", # Selector típico del input de Gemini
-            selector_respuesta_css="message-content", # Gemini usa la etiqueta <message-content>
-            nombre_ia="Gemini"
+            nombre_ia="Gemini",
+            selector_caja_by=By.CSS_SELECTOR,
+            selector_caja_valor=".ql-editor[contenteditable='true'], rich-textarea [contenteditable='true']",
+            selector_respuesta_css="message-content",
+            selector_boton_enviar="button.send-button, button[aria-label='Enviar mensaje'], button[aria-label='Send message']",
         )
     except Exception as e:
-        return f"❌ Error ejecutando Gemini Web: {str(e)}"
-    finally:
-        if driver: driver.quit()
+        print(f"Error Gemini: {e}")
+        _invalidar_driver()
+        return f"Error ejecutando Gemini Web: {e}"
 
+# ---------------------------------------------------------------------------
+# Test rapido
+# ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Test rápido del módulo si se corre independientemente
-    respuesta = ask_chatgpt_web("Hola, dime en 2 líneas qué es la programación.")
-    print("\nRespuesta obtenida:\n", respuesta)
+    resp = ask_chatgpt_web("Hola, dime en 2 lineas que es la programacion.")
+    print("\nRespuesta:\n", resp)

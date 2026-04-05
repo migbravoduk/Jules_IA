@@ -163,6 +163,130 @@ def cmd_crear_excel_complejo_con_chatgpt(instruccion: str, filename: str) -> str
     texto_json = limpiar_json_de_chatgpt(respuesta)
     return crear_excel_complejo_desde_json(filename, texto_json)
 
+def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
+    """Modo Deep Research para Word: Divide la tarea en Índice y luego itera por cada sección."""
+    print("🧠 [Deep Research] Generando índice / outline...")
+    prompt_indice = (
+        f"Actúa como un investigador experto planificando un estudio detallado sobre: '{instruccion}'.\n"
+        f"Genera SOLO un array JSON con las secciones principales (entre 4 y 7 secciones) para analizar este tema a fondo.\n"
+        f"Formato esperado estricto:\n"
+        f"[\n"
+        f"  {{\"seccion\": \"1. Historia y Contexto\"}},\n"
+        f"  {{\"seccion\": \"2. Análisis Técnico\"}}\n"
+        f"]"
+    )
+    resp_indice = enviar_a_ia_externa(prompt_indice, motor)
+    if resp_indice.startswith("❌"): return resp_indice
+
+    try:
+        texto_json_indice = limpiar_json_de_chatgpt(resp_indice)
+        indice = json.loads(texto_json_indice)
+    except Exception as e:
+        return f"Error en Deep Research (No se pudo parsear el índice): {e}\nRespuesta IA: {resp_indice}"
+
+    if not indice: return "Error: El índice devuelto está vacío."
+
+    print(f"📚 [Deep Research] Índice detectado con {len(indice)} secciones. Empezando redacción profunda...")
+    documento_final_json = []
+
+    # Agregar Título Principal al documento
+    match_tema = re.search(r"sobre (.+?)(?:\.|,|$)", instruccion.lower())
+    tema_detectado = match_tema.group(1).title() if match_tema else "Reporte de Análisis"
+    documento_final_json.append({"tipo": "titulo", "texto": f"Deep Research: {tema_detectado}"})
+
+    for item in indice:
+        tema_seccion = item.get("seccion", "Tema Desconocido")
+        print(f"✍️ [Deep Research] Investigando y redactando: {tema_seccion}...")
+
+        prompt_seccion = (
+            f"Actúa como un analista experto escribiendo el contenido PROFUNDO para la sección '{tema_seccion}' de un estudio sobre: '{instruccion}'.\n"
+            f"Escribe múltiples párrafos largos, detalles, datos y si es posible, citas expertas.\n"
+            f"Genera estrictamente un array JSON que representa esta subsección. Usa este esquema:\n"
+            f"[\n"
+            f"  {{\"tipo\": \"subtitulo\", \"texto\": \"{tema_seccion}\"}},\n"
+            f"  {{\"tipo\": \"parrafo\", \"texto\": \"Explicación ultra detallada y rica en datos...\"}},\n"
+            f"  {{\"tipo\": \"lista\", \"items\": [\"Punto analítico 1\", \"Punto analítico 2\"]}}\n"
+            f"]\n"
+            f"IMPORTANTE: Devuelve SOLO el JSON validado, sin texto exterior."
+        )
+
+        resp_seccion = enviar_a_ia_externa(prompt_seccion, motor)
+        if resp_seccion.startswith("❌"):
+            print(f"⚠️ Error generando sección '{tema_seccion}', saltando...")
+            continue
+
+        try:
+            texto_json_seccion = limpiar_json_de_chatgpt(resp_seccion)
+            contenido_seccion = json.loads(texto_json_seccion)
+            if isinstance(contenido_seccion, list):
+                documento_final_json.extend(contenido_seccion)
+            else:
+                documento_final_json.append(contenido_seccion)
+        except Exception as e:
+             print(f"⚠️ Error parseando sección '{tema_seccion}': {e}")
+
+    print(f"🏗️ [Deep Research] Ensamblando documento Word con {len(documento_final_json)} bloques de contenido...")
+    return crear_word_complejo_desde_json(filename, json.dumps(documento_final_json))
+
+def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
+    """Modo Deep Research para PPT: Extrae slide-titles primero y luego rellena el contenido."""
+    print("🧠 [Deep Research] Generando estructura de la presentación...")
+    prompt_indice = (
+        f"Actúa como un diseñador de presentaciones estratégico. Plantea la estructura para un PowerPoint muy detallado sobre: '{instruccion}'.\n"
+        f"Genera SOLO un array JSON con los títulos de los slides que deberán existir (entre 5 y 10 slides).\n"
+        f"Formato esperado estricto:\n"
+        f"[\n"
+        f"  {{\"slide\": \"Portada Principal\"}},\n"
+        f"  {{\"slide\": \"Contexto Histórico\"}},\n"
+        f"  {{\"slide\": \"Datos Clave\"}}\n"
+        f"]"
+    )
+    resp_indice = enviar_a_ia_externa(prompt_indice, motor)
+    if resp_indice.startswith("❌"): return resp_indice
+
+    try:
+        texto_json_indice = limpiar_json_de_chatgpt(resp_indice)
+        indice = json.loads(texto_json_indice)
+    except Exception as e:
+         return f"Error en Deep Research PPT (No se pudo parsear índice): {e}"
+
+    ppt_final_json = []
+
+    for i, item in enumerate(indice):
+        titulo_slide = item.get("slide", f"Slide {i+1}")
+        print(f"✍️ [Deep Research] Generando contenido para slide: {titulo_slide}...")
+
+        # El primero lo forzamos a portada
+        if i == 0:
+            prompt_slide = (
+                f"Haz la portada para una ppt sobre '{instruccion}'.\n"
+                f"Devuelve estrictamente un JSON de un solo objeto:\n"
+                f"{{\"tipo\": \"portada\", \"titulo\": \"{titulo_slide}\", \"subtitulo\": \"Análisis Estratégico y Detallado\"}}"
+            )
+        else:
+            prompt_slide = (
+                f"Actúa como analista. Escribe el contenido intelectual para el slide '{titulo_slide}' de una presentación sobre '{instruccion}'.\n"
+                f"Debe contener datos duros y conclusiones.\n"
+                f"Devuelve estrictamente un JSON de un solo objeto:\n"
+                f"{{\"tipo\": \"contenido\", \"titulo\": \"{titulo_slide}\", \"viñetas\": [\"Explicación profunda...\", \"Dato estadístico...\", \"Conclusión clave...\"]}}"
+            )
+
+        resp_slide = enviar_a_ia_externa(prompt_slide, motor)
+        if resp_slide.startswith("❌"): continue
+
+        try:
+             texto_json_slide = limpiar_json_de_chatgpt(resp_slide)
+             contenido_slide = json.loads(texto_json_slide)
+             if isinstance(contenido_slide, list) and len(contenido_slide)>0:
+                 ppt_final_json.append(contenido_slide[0])
+             else:
+                 ppt_final_json.append(contenido_slide)
+        except Exception:
+             pass
+
+    print(f"🏗️ [Deep Research] Ensamblando presentación de {len(ppt_final_json)} slides...")
+    return crear_ppt_compleja_desde_json(filename, json.dumps(ppt_final_json))
+
 def cmd_revisar_mejorar_archivo_con_chatgpt(instruccion: str, filename_origen: str) -> str:
     """
     Lee un archivo desde 'inputs' o 'outputs', envía su contenido a ChatGPT junto
@@ -214,7 +338,8 @@ def dispatcher_ia(instruccion: str) -> str:
         return cmd_listar()
 
     # Variables de complejidad: si la instrucción tiene más de 80 caracteres o palabras clave "fuertes".
-    es_complejo = len(instruccion) > 80 or any(kw in instruccion_lower for kw in [
+    es_deep_research = "investiga a fondo" in instruccion_lower or "deep research" in instruccion_lower
+    es_complejo = es_deep_research or len(instruccion) > 80 or any(kw in instruccion_lower for kw in [
         "complejo", "chatgpt", "gemini", "extenso", "investiga", "noticias", "detallado", "creame un"
     ])
 
@@ -237,7 +362,9 @@ def dispatcher_ia(instruccion: str) -> str:
         if match: tema = match.group(1).strip()
         nombre_limpio = obtener_nombre_seguro(instruccion, tema)
 
-        if es_complejo:
+        if es_deep_research:
+            return cmd_crear_word_deep_research(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
+        elif es_complejo:
             return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
         else:
             return cmd_crear_docx_profesional(titulo=f"Informe: {tema}", tema=tema, filename=f"{nombre_limpio}.docx")
@@ -265,7 +392,9 @@ def dispatcher_ia(instruccion: str) -> str:
         if match: tema = match.group(1).strip()
         nombre_limpio = obtener_nombre_seguro(instruccion, tema)
 
-        if es_complejo:
+        if es_deep_research:
+            return cmd_crear_ppt_deep_research(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
+        elif es_complejo:
             return cmd_crear_ppt_compleja_con_chatgpt(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
         else:
             return "Comando de actualizar PPT detectado. Falta el diccionario de reemplazos."
@@ -302,6 +431,13 @@ def dispatcher_ia(instruccion: str) -> str:
         return ask_chatgpt_web(prompt)
 
     # --- FALLBACK: TAREA COMPLEJA GENÉRICA (ASUMIMOS WORD) ---
+    elif es_deep_research:
+        tema = "investigacion_generica"
+        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
+        if match: tema = match.group(1).strip()
+        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
+        return cmd_crear_word_deep_research(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
+    
     elif es_complejo:
         tema = "investigacion_general"
         match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
