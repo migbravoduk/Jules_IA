@@ -92,18 +92,21 @@ def enviar_a_ia_externa(prompt: str, motor: str) -> str:
 def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
     """Orquesta la creación de una PPT compleja usando IA Externa."""
     prompt = (
-        f"Actúa como un investigador y diseñador experto de nivel 'NotebookLM'. "
-        f"Tu objetivo es crear una presentación exhaustiva y sofisticada basada en esta instrucción: '{instruccion}'.\n"
-        f"La presentación debe ser larga, detallada y estructurada para una audiencia ejecutiva o académica.\n"
-        f"Usa datos profundos. El JSON debe ser un array de objetos.\n"
-        f"El primer objeto debe ser tipo portada. Luego incluye un tipo 'indice', y los demás tipo 'contenido' o 'cita'.\n"
-        f"Genera la respuesta estrictamente en formato JSON, sin texto fuera del JSON.\n"
-        f"Formato esperado:\n"
+        f"Actúa como un diseñador de presentaciones ejecutivas experto.\n"
+        f"Instrucción: '{instruccion}'.\n"
+        f"REGLAS OBLIGATORIAS:\n"
+        f"  - Cada viñeta: MÁXIMO 12 palabras. Concisa, impactante, basada en datos.\n"
+        f"  - Máximo 5 viñetas por slide de contenido.\n"
+        f"  - Incluye UN slide de cita inspiradora.\n"
+        f"  - Al FINAL incluye un objeto tipo 'referencias' con al menos 4 fuentes APA reales.\n"
+        f"Genera SOLO JSON puro, sin texto fuera del array.\n"
+        f"Formato:\n"
         f"[\n"
         f"  {{\"tipo\": \"portada\", \"titulo\": \"...\", \"subtitulo\": \"...\"}},\n"
-        f"  {{\"tipo\": \"indice\", \"titulo\": \"Índice de Contenidos\", \"viñetas\": [\"1. Tema\", \"2. Tema\"]}},\n"
-        f"  {{\"tipo\": \"cita\", \"texto\": \"Una frase inspiradora o cita clave relacionada al tema\"}},\n"
-        f"  {{\"tipo\": \"contenido\", \"titulo\": \"...\", \"viñetas\": [\"Dato analítico 1\", \"Dato analítico 2\"]}}\n"
+        f"  {{\"tipo\": \"indice\", \"titulo\": \"Índice\", \"viñetas\": [\"1. Tema\", \"2. Tema\"]}},\n"
+        f"  {{\"tipo\": \"cita\", \"texto\": \"Frase clave corta e impactante\"}},\n"
+        f"  {{\"tipo\": \"contenido\", \"titulo\": \"...\", \"viñetas\": [\"Dato clave 1\", \"Dato clave 2\"]}},\n"
+        f"  {{\"tipo\": \"referencias\", \"items\": [\"Autor, A. (Año). Título. Fuente.\"]}}\n"
         f"]"
     )
 
@@ -117,23 +120,22 @@ def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: s
 def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
     """Orquesta la creación de un Word complejo usando IA Externa."""
     prompt = (
-        f"Actúa como un investigador experto creando un documento de estudio avanzado tipo 'NotebookLM'.\n"
-        f"El usuario pide lo siguiente: '{instruccion}'.\n"
-        f"Genera un informe MUY EXTENSO, profundo y analítico. Debe incluir:\n"
-        f"- Título Principal (tipo 'titulo')\n"
-        f"- Múltiples Subtítulos para dividir el análisis (tipo 'subtitulo')\n"
-        f"- Citas clave o 'takeaways' (tipo 'cita')\n"
-        f"- Explicaciones detalladas en párrafos profundos (tipo 'parrafo')\n"
-        f"- Listas de puntos clave estructurados (tipo 'lista')\n"
-        f"- Si se requieren datos comparativos, usa tipo 'tabla'.\n"
-        f"Genera esto estrictamente en formato JSON puro. Ejemplo de esquema:\n"
+        f"Actúa como un investigador académico experto generando un informe formal en formato APA.\n"
+        f"El usuario pide: '{instruccion}'.\n"
+        f"Genera un informe EXTENSO y analítico. REGLAS:\n"
+        f"  - Párrafos profundos, mínimo 4 oraciones cada uno.\n"
+        f"  - Incluye tablas comparativas cuando haya datos numéricos o comparaciones.\n"
+        f"  - Incluye al menos 1 cita destacada por sección.\n"
+        f"  - AL FINAL incluye un bloque 'referencias' con mínimo 5 fuentes en formato APA real.\n"
+        f"Genera SOLO JSON puro. Esquema:\n"
         f"[\n"
         f"  {{\"tipo\": \"titulo\", \"texto\": \"Título\"}},\n"
-        f"  {{\"tipo\": \"cita\", \"texto\": \"Frase destacada o Insight clave\"}},\n"
-        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1: Contexto\"}},\n"
+        f"  {{\"tipo\": \"cita\", \"texto\": \"Insight clave\"}},\n"
+        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1\"}},\n"
         f"  {{\"tipo\": \"parrafo\", \"texto\": \"Análisis extenso...\"}},\n"
-        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto detallado 1\", \"Punto detallado 2\"]}},\n"
-        f"  {{\"tipo\": \"tabla\", \"filas\": [[\"A\", \"B\"], [\"1\", \"2\"]]}}\n"
+        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}},\n"
+        f"  {{\"tipo\": \"tabla\", \"titulo\": \"Tabla 1\", \"filas\": [[\"Col A\", \"Col B\"], [\"Val 1\", \"Val 2\"]]}},\n"
+        f"  {{\"tipo\": \"referencias\", \"items\": [\"Autor, A. (Año). Título. Revista, vol(n), pp. https://doi.org/...\"]}}\n"
         f"]"
     )
     respuesta = enviar_a_ia_externa(prompt, motor)
@@ -194,20 +196,30 @@ def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "
     tema_detectado = match_tema.group(1).title() if match_tema else "Reporte de Análisis"
     documento_final_json.append({"tipo": "titulo", "texto": f"Deep Research: {tema_detectado}"})
 
+    referencias_globales = []  # Se acumulan de todas las secciones
+
     for item in indice:
         tema_seccion = item.get("seccion", "Tema Desconocido")
         print(f"✍️ [Deep Research] Investigando y redactando: {tema_seccion}...")
 
         prompt_seccion = (
-            f"Actúa como un analista experto escribiendo el contenido PROFUNDO para la sección '{tema_seccion}' de un estudio sobre: '{instruccion}'.\n"
-            f"Escribe múltiples párrafos largos, detalles, datos y si es posible, citas expertas.\n"
-            f"Genera estrictamente un array JSON que representa esta subsección. Usa este esquema:\n"
+            f"Actúa como un investigador académico redactando la sección '{tema_seccion}' "
+            f"de un informe APA sobre: '{instruccion}'.\n"
+            f"REGLAS:\n"
+            f"  - Escribe mínimo 3 párrafos profundos (tipo 'parrafo'), cada uno con ≥4 oraciones.\n"
+            f"  - Incluye una tabla comparativa (tipo 'tabla') si hay datos numéricos o comparaciones relevantes.\n"
+            f"  - Incluye una cita destacada (tipo 'cita') con un insight o dato clave.\n"
+            f"  - Incluye una lista de puntos clave (tipo 'lista') al final de la sección.\n"
+            f"  - Incluye 2-3 referencias APA reales en 'tipo': 'referencias'.\n"
+            f"Devuelve SOLO un array JSON válido, sin texto exterior. Esquema:\n"
             f"[\n"
             f"  {{\"tipo\": \"subtitulo\", \"texto\": \"{tema_seccion}\"}},\n"
-            f"  {{\"tipo\": \"parrafo\", \"texto\": \"Explicación ultra detallada y rica en datos...\"}},\n"
-            f"  {{\"tipo\": \"lista\", \"items\": [\"Punto analítico 1\", \"Punto analítico 2\"]}}\n"
-            f"]\n"
-            f"IMPORTANTE: Devuelve SOLO el JSON validado, sin texto exterior."
+            f"  {{\"tipo\": \"cita\", \"texto\": \"Dato o insight clave\"}},\n"
+            f"  {{\"tipo\": \"parrafo\", \"texto\": \"Análisis profundo...\"}},\n"
+            f"  {{\"tipo\": \"tabla\", \"titulo\": \"Tabla X\", \"filas\": [[\"Col\", \"Val\"], [\"A\", \"1\"]]}},\n"
+            f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}},\n"
+            f"  {{\"tipo\": \"referencias\", \"items\": [\"Autor, A. (Año). Título. Revista.\"]}}\n"
+            f"]"
         )
 
         resp_seccion = enviar_a_ia_externa(prompt_seccion, motor)
@@ -219,11 +231,23 @@ def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "
             texto_json_seccion = limpiar_json_de_chatgpt(resp_seccion)
             contenido_seccion = json.loads(texto_json_seccion)
             if isinstance(contenido_seccion, list):
-                documento_final_json.extend(contenido_seccion)
+                # Separar referencias para consolidarlas al final
+                for bloque in contenido_seccion:
+                    if bloque.get("tipo") == "referencias":
+                        referencias_globales.extend(bloque.get("items", []))
+                    else:
+                        documento_final_json.append(bloque)
             else:
                 documento_final_json.append(contenido_seccion)
         except Exception as e:
-             print(f"⚠️ Error parseando sección '{tema_seccion}': {e}")
+            print(f"⚠️ Error parseando sección '{tema_seccion}': {e}")
+
+    # Añadir sección de Referencias consolidada al final
+    if referencias_globales:
+        # Eliminar duplicados manteniendo orden
+        seen = set()
+        refs_unicas = [r for r in referencias_globales if not (r in seen or seen.add(r))]
+        documento_final_json.append({"tipo": "referencias", "items": refs_unicas})
 
     print(f"🏗️ [Deep Research] Ensamblando documento Word con {len(documento_final_json)} bloques de contenido...")
     return crear_word_complejo_desde_json(filename, json.dumps(documento_final_json))
@@ -259,30 +283,53 @@ def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "c
         # El primero lo forzamos a portada
         if i == 0:
             prompt_slide = (
-                f"Haz la portada para una ppt sobre '{instruccion}'.\n"
-                f"Devuelve estrictamente un JSON de un solo objeto:\n"
+                f"Genera la portada para una presentación ejecutiva sobre '{instruccion}'.\n"
+                f"Devuelve estrictamente UN objeto JSON:\n"
                 f"{{\"tipo\": \"portada\", \"titulo\": \"{titulo_slide}\", \"subtitulo\": \"Análisis Estratégico y Detallado\"}}"
             )
         else:
             prompt_slide = (
-                f"Actúa como analista. Escribe el contenido intelectual para el slide '{titulo_slide}' de una presentación sobre '{instruccion}'.\n"
-                f"Debe contener datos duros y conclusiones.\n"
-                f"Devuelve estrictamente un JSON de un solo objeto:\n"
-                f"{{\"tipo\": \"contenido\", \"titulo\": \"{titulo_slide}\", \"viñetas\": [\"Explicación profunda...\", \"Dato estadístico...\", \"Conclusión clave...\"]}}"
+                f"Actúa como analista experto. Genera el contenido para el slide '{titulo_slide}' "
+                f"de una presentación ejecutiva sobre '{instruccion}'.\n"
+                f"REGLAS OBLIGATORIAS:\n"
+                f"  - Máximo 5 viñetas.\n"
+                f"  - Cada viñeta: MÁXIMO 12 palabras. Datos concretos, sin relleno.\n"
+                f"  - Si es un slide de cita, usa tipo 'cita' con una frase impactante corta.\n"
+                f"Devuelve estrictamente UN objeto JSON (no un array):\n"
+                f"{{\"tipo\": \"contenido\", \"titulo\": \"{titulo_slide}\", "
+                f"\"viñetas\": [\"Dato clave 1\", \"Dato clave 2\", \"Dato clave 3\"]}}"
             )
 
         resp_slide = enviar_a_ia_externa(prompt_slide, motor)
         if resp_slide.startswith("❌"): continue
 
         try:
-             texto_json_slide = limpiar_json_de_chatgpt(resp_slide)
-             contenido_slide = json.loads(texto_json_slide)
-             if isinstance(contenido_slide, list) and len(contenido_slide)>0:
-                 ppt_final_json.append(contenido_slide[0])
-             else:
-                 ppt_final_json.append(contenido_slide)
+            texto_json_slide = limpiar_json_de_chatgpt(resp_slide)
+            contenido_slide = json.loads(texto_json_slide)
+            if isinstance(contenido_slide, list) and len(contenido_slide) > 0:
+                ppt_final_json.append(contenido_slide[0])
+            else:
+                ppt_final_json.append(contenido_slide)
         except Exception:
-             pass
+            pass
+
+    # Pedir referencias al final en una sola llamada
+    print("📚 [Deep Research PPT] Generando slide(s) de Referencias...")
+    prompt_refs = (
+        f"Genera una lista de al menos 5 referencias bibliográficas reales en formato APA "
+        f"sobre el tema: '{instruccion}'.\n"
+        f"Devuelve SOLO este objeto JSON (sin array exterior):\n"
+        f"{{\"tipo\": \"referencias\", \"items\": ["
+        f"\"Autor, A. (Año). Título. Revista, vol(n), pp. https://doi.org/...\"]}}"
+    )
+    resp_refs = enviar_a_ia_externa(prompt_refs, motor)
+    if not resp_refs.startswith("❌"):
+        try:
+            refs_json = json.loads(limpiar_json_de_chatgpt(resp_refs))
+            if isinstance(refs_json, dict):
+                ppt_final_json.append(refs_json)
+        except Exception:
+            pass
 
     print(f"🏗️ [Deep Research] Ensamblando presentación de {len(ppt_final_json)} slides...")
     return crear_ppt_compleja_desde_json(filename, json.dumps(ppt_final_json))
