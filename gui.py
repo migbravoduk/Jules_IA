@@ -16,7 +16,7 @@ class AgenteArchivosApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("Agente IA Local de Archivos")
+        self.title("Vader_Brain")
         self.geometry("900x700")
 
         # --- Variables de estado ---
