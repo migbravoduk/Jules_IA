@@ -1,4 +1,4 @@
-# Agente IA Local de Archivos (Ollama + ChatGPT Web + Office)
+# Vader_Brain (Ollama + ChatGPT Web + Office)
 
 Este proyecto es una aplicación local en Python que funciona como un asistente inteligente de escritorio. Combina lo mejor de dos mundos para ayudarte a gestionar, crear y procesar archivos de Office y texto:
 
