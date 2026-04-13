@@ -149,46 +149,67 @@ def _enviar_prompt(
     Robusto ante pérdida de foco del usuario (otro navegador abierto, etc.).
     """
 
-    # 1. Navegar SIEMPRE a la URL de destino y forzar foco de ventana
-    print(f"Navegando hacia {nombre_ia}: {url}")
-    try:
-        # Enfocar la ventana correcta de Chrome antes de navegar
-        for handle in driver.window_handles:
-            driver.switch_to.window(handle)
-            current = driver.current_url
-            if not current.startswith("chrome-extension://") and "devtools://" not in current:
-                break
-        driver.maximize_window()
-        # Invocar el foco a nivel del sistema operativo via JS
-        driver.execute_script("window.focus();")
-    except:
-        pass
-    driver.get(url)
-    time.sleep(4)  # Pausa extra para carga completa (especialmente Gemini)
+    # 1. Navegacion robusta: 3 metodos en cascada con verificacion de URL
+    #    driver.get() en modo debug puede ejecutarse sin que Chrome navegue visualmente.
+    dominio_esperado = url.split("/")[2]
+    navegado = False
 
-    # ─── Verificar que llegamos al destino correcto (no hubo redirección a login) ───
-    dominio_esperado = url.split("/")[2]  # ej: "gemini.google.com"
-    url_actual = driver.current_url
-    if dominio_esperado not in url_actual:
-        print(f"⚠️  Redirección detectada hacia: {url_actual}")
-        print(f"   Se esperaba llegar a '{dominio_esperado}' pero la página redirigió.")
-        print(f"   → Si ves una pantalla de login, inicia sesión en Chrome manualmente.")
-        print(f"   → El agente esperará hasta 2 minutos para que completes el login...")
+    for intento in range(3):
+        url_antes = driver.current_url
+        print(f"[Nav {intento+1}/3] Destino: {url} | URL actual: {url_antes}")
+        try:
+            if intento == 0:
+                # Metodo 1: driver.get() estandar
+                driver.get(url)
+            elif intento == 1:
+                # Metodo 2: JS window.location.href
+                print("  Intentando via JS window.location.href...")
+                driver.execute_script("window.location.href = arguments[0];", url)
+            else:
+                # Metodo 3: Nueva pestana + driver.get()
+                print("  Abriendo nueva pestana y navegando...")
+                driver.execute_script("window.open('');")
+                time.sleep(1)
+                driver.switch_to.window(driver.window_handles[-1])
+                driver.get(url)
+        except Exception as e:
+            print(f"  Metodo {intento+1} fallo: {e}")
 
-        deadline_login = time.time() + 120
-        while time.time() < deadline_login:
-            url_actual = driver.current_url
-            if dominio_esperado in url_actual:
-                print(f"✅ Login detectado. Continuando hacia {nombre_ia}...")
+        # Esperar carga y verificar URL
+        time.sleep(5)
+        url_actual = driver.current_url
+        print(f"  URL post-navegacion: {url_actual}")
+
+        if dominio_esperado in url_actual:
+            print(f"[OK] Navegacion exitosa hacia {nombre_ia}.")
+            navegado = True
+            break
+
+        # Detectar pantalla de login de Google
+        if "accounts.google.com" in url_actual or "google.com/signin" in url_actual:
+            print("  Login de Google detectado.")
+            print("  Inicia sesion manualmente en la ventana de Chrome (espera hasta 2 min)...")
+            deadline_login = time.time() + 120
+            while time.time() < deadline_login:
+                if dominio_esperado in driver.current_url:
+                    print("[OK] Login completado. Continuando...")
+                    navegado = True
+                    break
                 time.sleep(2)
+            if navegado:
                 break
-            time.sleep(2)
-        else:
-            return (
-                f"❌ Error: No se pudo acceder a {nombre_ia}.\n"
-                f"   La página redirigió a: {driver.current_url}\n"
-                f"   Inicia sesión manualmente en Chrome (perfil ChromeBotProfile) y vuelve a intentarlo."
-            )
+
+        print("  URL no corresponde al dominio esperado, reintentando...")
+
+    if not navegado:
+        _invalidar_driver()
+        return (
+            "Error: No se pudo navegar a " + nombre_ia + " tras 3 intentos. "
+            "URL final: " + driver.current_url + ". "
+            "Se reiniciara Chrome en el siguiente intento."
+        )
+
+    time.sleep(2)  # Pausa extra para estabilizar pagina cargada
 
     # 2. Esperar la caja de texto
     print(f"Buscando caja de texto en {nombre_ia}...")
