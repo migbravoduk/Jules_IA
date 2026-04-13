@@ -672,18 +672,22 @@ def dispatcher_ia(instruccion: str) -> str:
         "profundiza el archivo", "mejora el archivo word",
         "profundizar word", "mejorar word"
     ]):
-        match_archivo = re.search(r'(?:word|documento|archivo)\s+([a-zA-Z0-9_.\-áéíóúñ]+\.docx?)', instruccion_lower)
-        if not match_archivo:
-            match_archivo = re.search(r'([a-zA-Z0-9_.\-]+\.docx?)', instruccion_lower)
+        # Buscar el nombre del archivo .docx en la instrucción
+        match_archivo = re.search(r'([a-zA-Z0-9_.\-áéíóúñ]+\.docx?)', instruccion, re.IGNORECASE)
         if match_archivo:
             nombre_archivo = match_archivo.group(1)
-            # Extraer instruccion adicional si la hay
-            instruccion_extra = re.sub(r'(?:profundiza|mejora|amplía|amplia|sube)[^:]*(?:word|documento|archivo)[^:]*(?:\s+\S+\.docx?)?\s*', "", instruccion_lower).strip()
+            # La instrucción extra es todo lo que viene DESPUÉS del nombre del archivo
+            pos_fin_archivo = match_archivo.end()
+            instruccion_extra = instruccion[pos_fin_archivo:].strip()
+            # Limpiar conectores comunes al inicio ("y", ":", ",", "-")
+            instruccion_extra = re.sub(r'^[,\-:;yY]\s*', '', instruccion_extra).strip()
             return cmd_profundizar_word_con_gemini(nombre_archivo, instruccion_extra, motor=motor_ia)
         return (
             "Para profundizar un Word, coloca el archivo en la carpeta 'inputs/' y usa:\n"
             "'Profundiza el word [nombre_archivo].docx'\n"
-            "Ejemplo: 'Profundiza el word reporte_mercado.docx y añade datos de 2024'"
+            "Puedes añadir instrucciones específicas después del nombre, por ejemplo:\n"
+            "'Profundiza el word reporte.docx y enfócate en las conclusiones'\n"
+            "'Mejora el word analisis.docx, hazlo más académico y añade datos de 2024'"
         )
 
     # --- REVISAR / MEJORAR / RESUMIR ARCHIVO (generico) ---
