@@ -89,23 +89,26 @@ def enviar_a_ia_externa(prompt: str, motor: str) -> str:
         return ask_gemini_web(prompt)
     return ask_chatgpt_web(prompt)
 
-def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
+def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: str = "gemini") -> str:
     """Orquesta la creación de una PPT compleja usando IA Externa."""
     prompt = (
         f"Actúa como un diseñador de presentaciones ejecutivas experto.\n"
-        f"Instrucción: '{instruccion}'.\n"
+        f"Instrucción del usuario: '{instruccion}'.\n"
         f"REGLAS OBLIGATORIAS:\n"
+        f"  - Genera entre 7 y 10 slides de contenido como mínimo.\n"
         f"  - Cada viñeta: MÁXIMO 12 palabras. Concisa, impactante, basada en datos.\n"
         f"  - Máximo 5 viñetas por slide de contenido.\n"
         f"  - Incluye UN slide de cita inspiradora.\n"
-        f"  - Al FINAL incluye un objeto tipo 'referencias' con al menos 4 fuentes APA reales.\n"
-        f"Genera SOLO JSON puro, sin texto fuera del array.\n"
-        f"Formato:\n"
+        f"  - Incluye slides de tipo 'tabla_slide' cuando haya datos numéricos o comparaciones.\n"
+        f"  - Al FINAL incluye un objeto tipo 'referencias' con al menos 5 fuentes APA reales.\n"
+        f"CRÍTICO: Responde ÚNICAMENTE con el array JSON válido. Sin texto introductorio, sin explicaciones, sin bloques de código markdown.\n"
+        f"Formato del array JSON:\n"
         f"[\n"
         f"  {{\"tipo\": \"portada\", \"titulo\": \"...\", \"subtitulo\": \"...\"}},\n"
         f"  {{\"tipo\": \"indice\", \"titulo\": \"Índice\", \"viñetas\": [\"1. Tema\", \"2. Tema\"]}},\n"
         f"  {{\"tipo\": \"cita\", \"texto\": \"Frase clave corta e impactante\"}},\n"
         f"  {{\"tipo\": \"contenido\", \"titulo\": \"...\", \"viñetas\": [\"Dato clave 1\", \"Dato clave 2\"]}},\n"
+        f"  {{\"tipo\": \"tabla_slide\", \"titulo\": \"Tabla Comparativa\", \"headers\": [\"Columna A\", \"Columna B\"], \"filas\": [[\"Val 1\", \"Val 2\"]]}},\n"
         f"  {{\"tipo\": \"referencias\", \"items\": [\"Autor, A. (Año). Título. Fuente.\"]}}\n"
         f"]"
     )
@@ -117,24 +120,25 @@ def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: s
     texto_json = limpiar_json_de_chatgpt(respuesta)
     return crear_ppt_compleja_desde_json(filename, texto_json)
 
-def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
+def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str, motor: str = "gemini") -> str:
     """Orquesta la creación de un Word complejo usando IA Externa."""
     prompt = (
         f"Actúa como un investigador académico experto generando un informe formal en formato APA.\n"
         f"El usuario pide: '{instruccion}'.\n"
-        f"Genera un informe EXTENSO y analítico. REGLAS:\n"
+        f"Genera un informe EXTENSO y analítico con al menos 4 secciones. REGLAS:\n"
         f"  - Párrafos profundos, mínimo 4 oraciones cada uno.\n"
-        f"  - Incluye tablas comparativas cuando haya datos numéricos o comparaciones.\n"
-        f"  - Incluye al menos 1 cita destacada por sección.\n"
+        f"  - Incluye tablas comparativas (tipo 'tabla') cuando haya datos numéricos o comparaciones.\n"
+        f"  - Incluye al menos 1 cita destacada (tipo 'cita') por sección.\n"
         f"  - AL FINAL incluye un bloque 'referencias' con mínimo 5 fuentes en formato APA real.\n"
-        f"Genera SOLO JSON puro. Esquema:\n"
+        f"CRÍTICO: Responde ÚNICAMENTE con el array JSON válido. Sin texto introductorio, sin explicaciones, sin bloques de código markdown (no uses ```json).\n"
+        f"Esquema JSON:\n"
         f"[\n"
-        f"  {{\"tipo\": \"titulo\", \"texto\": \"Título\"}},\n"
-        f"  {{\"tipo\": \"cita\", \"texto\": \"Insight clave\"}},\n"
-        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección 1\"}},\n"
-        f"  {{\"tipo\": \"parrafo\", \"texto\": \"Análisis extenso...\"}},\n"
-        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}},\n"
-        f"  {{\"tipo\": \"tabla\", \"titulo\": \"Tabla 1\", \"filas\": [[\"Col A\", \"Col B\"], [\"Val 1\", \"Val 2\"]]}},\n"
+        f"  {{\"tipo\": \"titulo\", \"texto\": \"Título del Informe\"}},\n"
+        f"  {{\"tipo\": \"cita\", \"texto\": \"Insight clave introductorio\"}},\n"
+        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"1. Nombre de Sección\"}},\n"
+        f"  {{\"tipo\": \"parrafo\", \"texto\": \"Análisis extenso de al menos 4 oraciones...\"}},\n"
+        f"  {{\"tipo\": \"lista\", \"items\": [\"Punto clave 1\", \"Punto clave 2\"]}},\n"
+        f"  {{\"tipo\": \"tabla\", \"titulo\": \"Tabla 1: Nombre\", \"filas\": [[\"Col A\", \"Col B\"], [\"Val 1\", \"Val 2\"]]}},\n"
         f"  {{\"tipo\": \"referencias\", \"items\": [\"Autor, A. (Año). Título. Revista, vol(n), pp. https://doi.org/...\"]}}\n"
         f"]"
     )
@@ -144,34 +148,113 @@ def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str, motor: 
     texto_json = limpiar_json_de_chatgpt(respuesta)
     return crear_word_complejo_desde_json(filename, texto_json)
 
-def cmd_crear_excel_complejo_con_chatgpt(instruccion: str, filename: str) -> str:
-    """Orquesta la creación de un Excel complejo usando ChatGPT vía Selenium."""
+def cmd_crear_excel_complejo_con_chatgpt(instruccion: str, filename: str, motor: str = "gemini") -> str:
+    """Orquesta la creación de un Excel complejo usando IA Externa (Gemini por defecto)."""
     prompt = (
-        f"Actúa como un analista de datos experto. "
-        f"El usuario te pide generar un excel con lo siguiente: '{instruccion}'. "
-        f"Genera la estructura de los datos estrictamente en formato JSON, "
-        f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
-        f"La respuesta debe ser una lista de hojas. Formato esperado:\n"
+        f"Actúa como un analista de datos experto.\n"
+        f"El usuario pide generar un Excel con: '{instruccion}'.\n"
+        f"Genera múltiples hojas con datos reales y representativos.\n"
+        f"CRÍTICO: Responde ÚNICAMENTE con el array JSON válido, sin texto antes ni después, sin bloques de código markdown (no uses ```json).\n"
+        f"Formato esperado (array de hojas):\n"
         f"[\n"
-        f"  {{\"hoja\": \"Resumen Financiero\", \"datos\": [\n"
-        f"      [\"Mes\", \"Ingresos\", \"Egresos\", \"Balance\"],\n"
-        f"      [\"Enero\", 15000, 10000, 5000]\n"
+        f"  {{\"hoja\": \"Nombre Hoja 1\", \"datos\": [\n"
+        f"      [\"Columna A\", \"Columna B\", \"Columna C\"],\n"
+        f"      [\"Valor 1\", 15000, 5000],\n"
+        f"      [\"Valor 2\", 18000, 6500]\n"
         f"  ]}}\n"
         f"]"
     )
-    respuesta = ask_chatgpt_web(prompt)
+    respuesta = enviar_a_ia_externa(prompt, motor)
     if respuesta.startswith("❌"):
         return respuesta
     texto_json = limpiar_json_de_chatgpt(respuesta)
     return crear_excel_complejo_desde_json(filename, texto_json)
 
-def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
+def cmd_crear_excel_deep_research(instruccion: str, filename: str, motor: str = "gemini") -> str:
+    """
+    Modo Deep Research para Excel: planifica las hojas necesarias primero,
+    luego genera los datos de cada hoja en iteraciones separadas.
+    Produce un Excel mult-hoja con datos ricos y reales.
+    """
+    print("🧠 [Deep Research Excel] Planificando hojas del Excel...")
+
+    # Paso 1: Pedir a la IA un índice con las hojas que debe tener el Excel
+    prompt_indice = (
+        f"Actúa como un analista de datos experto planificando un Excel sobre: '{instruccion}'.\n"
+        f"Diseña entre 3 y 6 hojas de datos necesarias para cubrir el tema a fondo.\n"
+        f"Para cada hoja, define su nombre y las columnas que debe tener.\n"
+        f"CRÍTICO: Responde ÚNICAMENTE con el array JSON. Sin texto antes ni después, sin markdown.\n"
+        f"Formato estricto:\n"
+        f"[\n"
+        f"  {{\"hoja\": \"Resumen General\", \"columnas\": [\"Indicador\", \"Valor\", \"Variación\", \"Fuente\"]}},\n"
+        f"  {{\"hoja\": \"Serie Histórica\", \"columnas\": [\"Año\", \"Dato A\", \"Dato B\"]}}\n"
+        f"]"
+    )
+
+    resp_indice = enviar_a_ia_externa(prompt_indice, motor)
+    if resp_indice.startswith("❌"): return resp_indice
+
+    try:
+        indice_hojas = json.loads(limpiar_json_de_chatgpt(resp_indice))
+    except Exception as e:
+        return f"Error en Deep Research Excel (No se pudo parsear índice): {e}\nRespuesta IA: {resp_indice[:300]}"
+
+    if not indice_hojas:
+        return "Error: El índice de hojas devuelto está vacío."
+
+    print(f"📊 [Deep Research Excel] Se generarán {len(indice_hojas)} hojas. Empezando...")
+    excel_final_json = []
+
+    # Paso 2: Generar los datos de cada hoja en iteraciones separadas
+    for item in indice_hojas:
+        nombre_hoja = item.get("hoja", "Hoja")
+        columnas = item.get("columnas", [])
+        columnas_str = ", ".join(f'"{c}"' for c in columnas)
+        print(f"✍️ [Deep Research Excel] Generando datos para hoja: '{nombre_hoja}'...")
+
+        prompt_hoja = (
+            f"Actúa como un analista de datos experto. Genera los datos para la hoja '{nombre_hoja}' "
+            f"de un Excel sobre: '{instruccion}'.\n"
+            f"Las columnas son: [{columnas_str}].\n"
+            f"REGLAS:\n"
+            f"  - Genera mínimo 10 filas de datos reales y representativos.\n"
+            f"  - Los datos numéricos deben ser cohérentes y basados en información real.\n"
+            f"  - La primera fila del array 'datos' debe ser la fila de encabezados.\n"
+            f"CRÍTICO: Responde ÚNICAMENTE con este objeto JSON (sin array exterior, sin texto extra, sin markdown):\n"
+            f"{{\"hoja\": \"{nombre_hoja}\", \"datos\": ["
+            f"[{columnas_str}], "
+            f"[\"Valor A\", \"Valor B\"]]}}"
+        )
+
+        resp_hoja = enviar_a_ia_externa(prompt_hoja, motor)
+        if resp_hoja.startswith("❌"):
+            print(f"⚠️ Error generando hoja '{nombre_hoja}', saltando...")
+            continue
+
+        try:
+            hoja_data = json.loads(limpiar_json_de_chatgpt(resp_hoja))
+            if isinstance(hoja_data, dict) and "hoja" in hoja_data and "datos" in hoja_data:
+                excel_final_json.append(hoja_data)
+            elif isinstance(hoja_data, list):
+                # A veces la IA devuelve un array directamente
+                excel_final_json.extend(hoja_data)
+        except Exception as e:
+            print(f"⚠️ Error parseando hoja '{nombre_hoja}': {e}")
+
+    if not excel_final_json:
+        return "Error: No se pudo generar ningún dato para el Excel."
+
+    print(f"🏗️ [Deep Research Excel] Ensamblando Excel con {len(excel_final_json)} hojas...")
+    return crear_excel_complejo_desde_json(filename, json.dumps(excel_final_json))
+
+def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "gemini") -> str:
     """Modo Deep Research para Word: Divide la tarea en Índice y luego itera por cada sección."""
     print("🧠 [Deep Research] Generando índice / outline...")
     prompt_indice = (
         f"Actúa como un investigador experto planificando un estudio detallado sobre: '{instruccion}'.\n"
-        f"Genera SOLO un array JSON con las secciones principales (entre 4 y 7 secciones) para analizar este tema a fondo.\n"
-        f"Formato esperado estricto:\n"
+        f"Genera entre 5 y 7 secciones principales para analizar este tema a fondo.\n"
+        f"CRÍTICO: Responde ÚNICAMENTE con el array JSON. Sin texto antes ni después, sin markdown.\n"
+        f"Formato estricto:\n"
         f"[\n"
         f"  {{\"seccion\": \"1. Historia y Contexto\"}},\n"
         f"  {{\"seccion\": \"2. Análisis Técnico\"}}\n"
@@ -206,19 +289,20 @@ def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "
             f"Actúa como un investigador académico redactando la sección '{tema_seccion}' "
             f"de un informe APA sobre: '{instruccion}'.\n"
             f"REGLAS:\n"
-            f"  - Escribe mínimo 3 párrafos profundos (tipo 'parrafo'), cada uno con ≥4 oraciones.\n"
-            f"  - Incluye una tabla comparativa (tipo 'tabla') si hay datos numéricos o comparaciones relevantes.\n"
+            f"  - Escribe mínimo 3 párrafos profundos (tipo 'parrafo'), cada uno con al menos 4 oraciones.\n"
+            f"  - Si hay datos numéricos o comparaciones, incluye una tabla (tipo 'tabla') con datos reales.\n"
             f"  - Incluye una cita destacada (tipo 'cita') con un insight o dato clave.\n"
             f"  - Incluye una lista de puntos clave (tipo 'lista') al final de la sección.\n"
-            f"  - Incluye 2-3 referencias APA reales en 'tipo': 'referencias'.\n"
-            f"Devuelve SOLO un array JSON válido, sin texto exterior. Esquema:\n"
+            f"  - Incluye 2-3 referencias APA reales en tipo 'referencias'.\n"
+            f"CRÍTICO: Responde ÚNICAMENTE con el array JSON válido. Sin texto antes ni después, sin bloques markdown.\n"
+            f"Esquema:\n"
             f"[\n"
             f"  {{\"tipo\": \"subtitulo\", \"texto\": \"{tema_seccion}\"}},\n"
-            f"  {{\"tipo\": \"cita\", \"texto\": \"Dato o insight clave\"}},\n"
-            f"  {{\"tipo\": \"parrafo\", \"texto\": \"Análisis profundo...\"}},\n"
-            f"  {{\"tipo\": \"tabla\", \"titulo\": \"Tabla X\", \"filas\": [[\"Col\", \"Val\"], [\"A\", \"1\"]]}},\n"
-            f"  {{\"tipo\": \"lista\", \"items\": [\"Punto 1\", \"Punto 2\"]}},\n"
-            f"  {{\"tipo\": \"referencias\", \"items\": [\"Autor, A. (Año). Título. Revista.\"]}}\n"
+            f"  {{\"tipo\": \"cita\", \"texto\": \"Dato o insight clave de la sección\"}},\n"
+            f"  {{\"tipo\": \"parrafo\", \"texto\": \"Análisis profundo con al menos 4 oraciones...\"}},\n"
+            f"  {{\"tipo\": \"tabla\", \"titulo\": \"Tabla: Nombre descriptivo\", \"filas\": [[\"Encabezado A\", \"Encabezado B\"], [\"Dato 1\", \"Dato 2\"]]}},\n"
+            f"  {{\"tipo\": \"lista\", \"items\": [\"Punto clave 1\", \"Punto clave 2\", \"Punto clave 3\"]}},\n"
+            f"  {{\"tipo\": \"referencias\", \"items\": [\"Autor, A. (Año). Título. Revista, vol(n), pp.\"]}}\n"
             f"]"
         )
 
@@ -252,17 +336,18 @@ def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "
     print(f"🏗️ [Deep Research] Ensamblando documento Word con {len(documento_final_json)} bloques de contenido...")
     return crear_word_complejo_desde_json(filename, json.dumps(documento_final_json))
 
-def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "chatgpt") -> str:
+def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "gemini") -> str:
     """Modo Deep Research para PPT: Extrae slide-titles primero y luego rellena el contenido."""
     print("🧠 [Deep Research] Generando estructura de la presentación...")
     prompt_indice = (
-        f"Actúa como un diseñador de presentaciones estratégico. Plantea la estructura para un PowerPoint muy detallado sobre: '{instruccion}'.\n"
-        f"Genera SOLO un array JSON con los títulos de los slides que deberán existir (entre 5 y 10 slides).\n"
-        f"Formato esperado estricto:\n"
+        f"Actúa como un diseñador de presentaciones estratégico. Plantea la estructura para un PowerPoint ejecutivo sobre: '{instruccion}'.\n"
+        f"Genera entre 7 y 9 slides (incluyendo portada). Incluye al menos 2 slides de datos/tabla.\n"
+        f"CRÍTICO: Responde ÚNICAMENTE con el array JSON. Sin texto antes ni después, sin markdown.\n"
+        f"Formato estricto:\n"
         f"[\n"
-        f"  {{\"slide\": \"Portada Principal\"}},\n"
-        f"  {{\"slide\": \"Contexto Histórico\"}},\n"
-        f"  {{\"slide\": \"Datos Clave\"}}\n"
+        f"  {{\"slide\": \"Portada Principal\", \"tipo_sugerido\": \"portada\"}},\n"
+        f"  {{\"slide\": \"Contexto Histórico\", \"tipo_sugerido\": \"contenido\"}},\n"
+        f"  {{\"slide\": \"Datos Clave en Cifras\", \"tipo_sugerido\": \"tabla_slide\"}}\n"
         f"]"
     )
     resp_indice = enviar_a_ia_externa(prompt_indice, motor)
@@ -272,20 +357,30 @@ def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "c
         texto_json_indice = limpiar_json_de_chatgpt(resp_indice)
         indice = json.loads(texto_json_indice)
     except Exception as e:
-         return f"Error en Deep Research PPT (No se pudo parsear índice): {e}"
+         return f"Error en Deep Research PPT (No se pudo parsear índice): {e}\nRespuesta IA: {resp_indice[:400]}"
 
     ppt_final_json = []
 
     for i, item in enumerate(indice):
         titulo_slide = item.get("slide", f"Slide {i+1}")
-        print(f"✍️ [Deep Research] Generando contenido para slide: {titulo_slide}...")
+        tipo_sugerido = item.get("tipo_sugerido", "contenido")
+        print(f"✍️ [Deep Research] Generando contenido para slide: {titulo_slide} (tipo: {tipo_sugerido})...")
 
         # El primero lo forzamos a portada
         if i == 0:
             prompt_slide = (
                 f"Genera la portada para una presentación ejecutiva sobre '{instruccion}'.\n"
-                f"Devuelve estrictamente UN objeto JSON:\n"
+                f"CRÍTICO: Responde ÚNICAMENTE con este objeto JSON (sin array, sin texto extra, sin markdown):\n"
                 f"{{\"tipo\": \"portada\", \"titulo\": \"{titulo_slide}\", \"subtitulo\": \"Análisis Estratégico y Detallado\"}}"
+            )
+        elif tipo_sugerido == "tabla_slide":
+            prompt_slide = (
+                f"Genera un slide de tabla de datos para '{titulo_slide}' en una presentación sobre '{instruccion}'.\n"
+                f"La tabla debe tener datos reales, mínimo 4 filas de datos (sin contar encabezados).\n"
+                f"CRÍTICO: Responde ÚNICAMENTE con este objeto JSON (sin array, sin texto extra, sin markdown):\n"
+                f"{{\"tipo\": \"tabla_slide\", \"titulo\": \"{titulo_slide}\", "
+                f"\"headers\": [\"Columna A\", \"Columna B\", \"Columna C\"], "
+                f"\"filas\": [[\"Dato 1A\", \"Dato 1B\", \"Dato 1C\"], [\"Dato 2A\", \"Dato 2B\", \"Dato 2C\"]]}}"
             )
         else:
             prompt_slide = (
@@ -294,8 +389,8 @@ def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "c
                 f"REGLAS OBLIGATORIAS:\n"
                 f"  - Máximo 5 viñetas.\n"
                 f"  - Cada viñeta: MÁXIMO 12 palabras. Datos concretos, sin relleno.\n"
-                f"  - Si es un slide de cita, usa tipo 'cita' con una frase impactante corta.\n"
-                f"Devuelve estrictamente UN objeto JSON (no un array):\n"
+                f"  - Si es un slide de cita/frase impactante, usa tipo 'cita'.\n"
+                f"CRÍTICO: Responde ÚNICAMENTE con este objeto JSON (sin array, sin texto extra, sin markdown):\n"
                 f"{{\"tipo\": \"contenido\", \"titulo\": \"{titulo_slide}\", "
                 f"\"viñetas\": [\"Dato clave 1\", \"Dato clave 2\", \"Dato clave 3\"]}}"
             )
@@ -308,17 +403,17 @@ def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "c
             contenido_slide = json.loads(texto_json_slide)
             if isinstance(contenido_slide, list) and len(contenido_slide) > 0:
                 ppt_final_json.append(contenido_slide[0])
-            else:
+            elif isinstance(contenido_slide, dict):
                 ppt_final_json.append(contenido_slide)
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"⚠️ Error parseando slide '{titulo_slide}': {e}")
 
     # Pedir referencias al final en una sola llamada
     print("📚 [Deep Research PPT] Generando slide(s) de Referencias...")
     prompt_refs = (
-        f"Genera una lista de al menos 5 referencias bibliográficas reales en formato APA "
+        f"Genera una lista de al menos 6 referencias bibliográficas reales en formato APA "
         f"sobre el tema: '{instruccion}'.\n"
-        f"Devuelve SOLO este objeto JSON (sin array exterior):\n"
+        f"CRÍTICO: Responde ÚNICAMENTE con este objeto JSON (sin array exterior, sin texto extra, sin markdown):\n"
         f"{{\"tipo\": \"referencias\", \"items\": ["
         f"\"Autor, A. (Año). Título. Revista, vol(n), pp. https://doi.org/...\"]}}"
     )
@@ -354,16 +449,18 @@ def cmd_revisar_mejorar_archivo_con_chatgpt(instruccion: str, filename_origen: s
     prompt = (
         f"Actúa como un revisor experto. El usuario te pide lo siguiente: '{instruccion}'.\n"
         f"Aplica esto al siguiente texto original:\n\n---\n{contenido}\n---\n\n"
-        f"Genera la respuesta estrictamente en formato JSON para crear un documento Word, "
-        f"sin explicaciones adicionales, sin bloques de código Markdown, SOLO EL JSON PURO. "
+        f"CRÍTICO: Responde ÚNICAMENTE con el array JSON válido para crear un documento Word. Sin texto antes ni después, sin bloques markdown.\n"
         f"Formato esperado:\n"
         f"[\n"
         f"  {{\"tipo\": \"titulo\", \"texto\": \"Análisis o Mejora\"}},\n"
-        f"  {{\"tipo\": \"parrafo\", \"texto\": \"Contenido...\"}}\n"
+        f"  {{\"tipo\": \"cita\", \"texto\": \"Insight clave del contenido\"}},\n"
+        f"  {{\"tipo\": \"subtitulo\", \"texto\": \"Sección\"}},\n"
+        f"  {{\"tipo\": \"parrafo\", \"texto\": \"Contenido...\"}},\n"
+        f"  {{\"tipo\": \"referencias\", \"items\": [\"Fuente APA real\"]}}\n"
         f"]"
     )
 
-    respuesta = ask_chatgpt_web(prompt)
+    respuesta = enviar_a_ia_externa(prompt, "gemini")
     if respuesta.startswith("❌"):
         return respuesta
 
@@ -375,8 +472,12 @@ def cmd_revisar_mejorar_archivo_con_chatgpt(instruccion: str, filename_origen: s
 
 def dispatcher_ia(instruccion: str) -> str:
     """
-    Dispatcher simple basado en palabras clave.
+    Dispatcher inteligente basado en palabras clave + clasificación Ollama.
     Toma la instrucción del usuario en lenguaje natural y decide qué comando ejecutar.
+    Todos los tipos de documento (Word, Excel, PPT) soportan los tres niveles:
+      - Básico: Ollama local
+      - Complejo: Una llamada a Gemini/ChatGPT con JSON estructurado
+      - Deep Research: Múltiples llamadas iterativas a Gemini por sección/hoja/slide
     """
     instruccion_lower = instruccion.lower()
 
@@ -384,31 +485,44 @@ def dispatcher_ia(instruccion: str) -> str:
     if "lista" in instruccion_lower or "mostrar archivos" in instruccion_lower:
         return cmd_listar()
 
-    # Variables de complejidad: si la instrucción tiene más de 80 caracteres o palabras clave "fuertes".
-    es_deep_research = "investiga a fondo" in instruccion_lower or "deep research" in instruccion_lower
-    es_complejo = es_deep_research or len(instruccion) > 80 or any(kw in instruccion_lower for kw in [
-        "complejo", "chatgpt", "gemini", "extenso", "investiga", "noticias", "detallado", "creame un"
-    ])
+    # --- Detectar nivel de complejidad ---
+    # Deep Research: keywords explícitas o combinación de largo + profundidad
+    KEYWORDS_DEEP = [
+        "investiga a fondo", "deep research", "análisis profundo", "analisis profundo",
+        "investigación detallada", "investigacion detallada",
+        "informe completo", "reporte completo", "estudio completo",
+        "con tablas de datos", "con múltiples hojas", "con multiples hojas"
+    ]
+    es_deep_research = any(kw in instruccion_lower for kw in KEYWORDS_DEEP)
 
-    motor_ia = "gemini" if "gemini" in instruccion_lower else "chatgpt"
+    KEYWORDS_COMPLEJO = [
+        "complejo", "chatgpt", "gemini", "extenso", "investiga", "noticias",
+        "detallado", "creame un", "créame un", "genera un informe", "genera una presentación",
+        "genera un excel", "crea un informe", "crea una presentación",
+        "con referencias", "con datos reales", "formato apa"
+    ]
+    es_complejo = es_deep_research or len(instruccion) > 80 or any(kw in instruccion_lower for kw in KEYWORDS_COMPLEJO)
 
-    # 1. Usar Ollama para clasificar la intención principal (¿Word, Excel o PPT?)
-    # Esto evita confusión semántica ("tabla de excel pegada en un word" -> WORD)
+    motor_ia = "chatgpt" if "chatgpt" in instruccion_lower else "gemini"
+
+    # Clasificar tipo de documento con Ollama (o fallback semántico)
     tipo_documento = clasificar_intencion_con_ollama(instruccion)
 
     # Fallback semántico si Ollama falla o responde DESCONOCIDO
     if tipo_documento == "DESCONOCIDO":
-        if "word" in instruccion_lower or "informe" in instruccion_lower: tipo_documento = "WORD"
-        elif "excel" in instruccion_lower: tipo_documento = "EXCEL"
-        elif "ppt" in instruccion_lower or "presentacion" in instruccion_lower or "powerpoint" in instruccion_lower: tipo_documento = "PPT"
+        if any(kw in instruccion_lower for kw in ["word", "informe", "reporte", "documento", "memo"]): tipo_documento = "WORD"
+        elif any(kw in instruccion_lower for kw in ["excel", "hoja de cálculo", "tabla de datos", "base de datos", "dataset"]): tipo_documento = "EXCEL"
+        elif any(kw in instruccion_lower for kw in ["ppt", "presentación", "presentacion", "powerpoint", "diapositivas", "slides"]): tipo_documento = "PPT"
+
+    # ─── Helper: extraer tema y nombre de archivo ───
+    def _extraer_tema_y_nombre(fallback: str):
+        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
+        tema = match.group(1).strip() if match else fallback
+        return tema, obtener_nombre_seguro(instruccion, tema)
 
     # --- WORD ---
     if tipo_documento == "WORD":
-        tema = "Tema_general"
-        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
-        if match: tema = match.group(1).strip()
-        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
-
+        tema, nombre_limpio = _extraer_tema_y_nombre("tema_general")
         if es_deep_research:
             return cmd_crear_word_deep_research(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
         elif es_complejo:
@@ -419,50 +533,40 @@ def dispatcher_ia(instruccion: str) -> str:
     # --- EXCEL ---
     elif tipo_documento == "EXCEL":
         if "formato" in instruccion_lower or "formatear" in instruccion_lower:
-            return "Comando de formatear Excel detectado. Falta implementar el flujo completo de selección de archivo."
-
-        tema = "datos_generados"
-        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
-        if match: tema = match.group(1).strip()
-        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
-
-        if es_complejo:
-            return cmd_crear_excel_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.xlsx") # Solo soportado en ChatGPT por ahora
+            return "Comando de formatear Excel detectado. Selecciona el archivo primero en la GUI y usa 'formatear'."
+        tema, nombre_limpio = _extraer_tema_y_nombre("datos_generados")
+        if es_deep_research:
+            return cmd_crear_excel_deep_research(instruccion, f"{nombre_limpio}.xlsx", motor=motor_ia)
+        elif es_complejo:
+            return cmd_crear_excel_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.xlsx", motor=motor_ia)
         else:
-             datos = [["Nombre", "Valor"], ["Dato A", 10], ["Dato B", 20]]
-             return cmd_escribir_excel(f"{nombre_limpio}.xlsx", "Hoja1", datos)
+            datos = [["Nombre", "Valor"], ["Dato A", 10], ["Dato B", 20]]
+            return cmd_escribir_excel(f"{nombre_limpio}.xlsx", "Hoja1", datos)
 
     # --- POWERPOINT ---
     elif tipo_documento == "PPT":
-        tema = "Tema_general"
-        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
-        if match: tema = match.group(1).strip()
-        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
-
+        tema, nombre_limpio = _extraer_tema_y_nombre("tema_general")
         if es_deep_research:
             return cmd_crear_ppt_deep_research(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
         elif es_complejo:
             return cmd_crear_ppt_compleja_con_chatgpt(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
         else:
-            return "Comando de actualizar PPT detectado. Falta el diccionario de reemplazos."
+            return cmd_crear_ppt_compleja_con_chatgpt(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
 
     # --- TXT / TEMAS ---
     elif "escribe" in instruccion_lower or "crea un tema" in instruccion_lower:
-        tema = "Tema_generico"
-        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
-        if match: tema = match.group(1).strip()
-        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
+        tema, nombre_limpio = _extraer_tema_y_nombre("tema_generico")
         return cmd_crear_tema(tema, f"{nombre_limpio}.txt")
 
-    # --- REVISAR / MEJORAR / RESUMIR ARCHIVO CON CHATGPT ---
-    elif any(kw in instruccion_lower for kw in ["revisa el archivo", "mejora el archivo", "lee el archivo", "analiza el archivo", "resume el archivo", "resumir el archivo"]):
-        # Extraer posible nombre de archivo de la instrucción (ej. "lee el archivo reporte.txt y resúmelo")
+    # --- REVISAR / MEJORAR / RESUMIR ARCHIVO ---
+    elif any(kw in instruccion_lower for kw in [
+        "revisa el archivo", "mejora el archivo", "lee el archivo",
+        "analiza el archivo", "resume el archivo", "resumir el archivo"
+    ]):
         match_archivo = re.search(r'archivo\s+([a-zA-Z0-9_.\-]+)', instruccion_lower)
         if match_archivo:
-             nombre_archivo = match_archivo.group(1)
-             return cmd_revisar_mejorar_archivo_con_chatgpt(instruccion, nombre_archivo)
-        else:
-             return "Para revisar o mejorar un archivo debes indicar su nombre con su extensión (ej. 'revisa el archivo datos.txt'). Asegúrate de que esté en la carpeta 'inputs' o 'outputs'."
+            return cmd_revisar_mejorar_archivo_con_chatgpt(instruccion, match_archivo.group(1))
+        return "Para revisar o mejorar un archivo indica su nombre con extensión (ej. 'revisa el archivo datos.txt')."
 
     # --- RESUMIR WEB ---
     elif "resume la web" in instruccion_lower or "resumir la web" in instruccion_lower or "http" in instruccion_lower:
@@ -471,29 +575,26 @@ def dispatcher_ia(instruccion: str) -> str:
             return cmd_resumir_web(match.group(1))
         return "Comando de resumir web detectado, pero no encontré una URL válida."
 
-    # --- PREGUNTA DIRECTA A CHATGPT ---
-    elif "preguntale a chatgpt" in instruccion_lower or "usar ia web" in instruccion_lower:
-        prompt = instruccion.replace("preguntale a chatgpt", "").replace("usar ia web", "").strip()
-        if not prompt: return "Por favor dime qué quieres preguntarle a ChatGPT."
-        return ask_chatgpt_web(prompt)
+    # --- PREGUNTA DIRECTA A IA ---
+    elif any(kw in instruccion_lower for kw in ["preguntale a chatgpt", "preguntale a gemini", "usar ia web"]):
+        prompt_directo = instruccion
+        for kw in ["preguntale a chatgpt", "preguntale a gemini", "usar ia web"]:
+            prompt_directo = prompt_directo.replace(kw, "").replace(kw.replace("a", "á"), "")
+        prompt_directo = prompt_directo.strip()
+        if not prompt_directo: return f"Por favor dime qué quieres preguntarle."
+        return enviar_a_ia_externa(prompt_directo, motor_ia)
 
-    # --- FALLBACK: TAREA COMPLEJA GENÉRICA (ASUMIMOS WORD) ---
+    # --- FALLBACK: Instrucción compleja sin tipo detectado (asumimos WORD) ---
     elif es_deep_research:
-        tema = "investigacion_generica"
-        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
-        if match: tema = match.group(1).strip()
-        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
+        tema, nombre_limpio = _extraer_tema_y_nombre("investigacion_generica")
         return cmd_crear_word_deep_research(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
-    
+
     elif es_complejo:
-        tema = "investigacion_general"
-        match = re.search(r"sobre (.+?)(?:\.|,|$|ll[aá]male)", instruccion_lower)
-        if match: tema = match.group(1).strip()
-        nombre_limpio = obtener_nombre_seguro(instruccion, tema)
-        return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx")
+        tema, nombre_limpio = _extraer_tema_y_nombre("investigacion_general")
+        return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
 
     else:
-        return f"Instrucción no reconocida o no soportada aún por el dispatcher.\nInstrucción recibida: {instruccion}"
+        return f"Instrucción no reconocida. Por favor especifica el tipo de archivo (word, excel, ppt) y el tema.\nInstrucción recibida: {instruccion}"
 
 # Prueba local
 if __name__ == "__main__":

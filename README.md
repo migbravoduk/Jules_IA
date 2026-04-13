@@ -1,141 +1,189 @@
-# Vader_Brain (Ollama + ChatGPT Web + Office)
+# 🤖 Vader_Brain — Asistente IA Local de Documentos Office
 
-Este proyecto es una aplicación local en Python que funciona como un asistente inteligente de escritorio. Combina lo mejor de dos mundos para ayudarte a gestionar, crear y procesar archivos de Office y texto:
+Vader_Brain es un agente de IA de escritorio que combina una **IA local (Ollama)** con **Gemini/ChatGPT vía Selenium** para crear documentos Office de alta calidad (Word, Excel, PowerPoint) con solo describirlos en lenguaje natural.
 
-- **IA Local (Ollama):** Actúa como el orquestador principal. Es rápido, privado y resuelve tareas sencillas como resúmenes cortos, redacción básica y listar archivos de forma local.
-- **IA Externa (ChatGPT vía Selenium):** Se invoca automáticamente como un "Skill Avanzado" para tareas complejas que requieren de mucho razonamiento estructurado o conocimiento de internet. Esto evita las alucinaciones típicas de los modelos locales al generar bases de datos enteras (Excel), presentaciones (PowerPoint) o informes extensos (Word).
-
-Cuenta con una **interfaz gráfica amigable** (`CustomTkinter`) y un motor inteligente (`dispatcher_ia`) que interpreta tus instrucciones en lenguaje natural.
+Cuenta con una **interfaz gráfica moderna** (`CustomTkinter`) y un sistema de **tres niveles de generación** que escala la potencia de la IA según la complejidad de tu pedido.
 
 ---
 
-## 1. Arquitectura y Seguridad (Sandbox)
-
-El proyecto está diseñado de forma modular, lo que garantiza extensibilidad. Además, implementa un **"sandbox"** (entorno seguro) a través del archivo `sandbox.py`. El agente solo puede crear, leer y modificar archivos dentro de las carpetas permitidas (por ejemplo, `outputs/`), evitando modificaciones accidentales en tu sistema.
+## 🏗 Arquitectura
 
 ```text
-project/
+Vader_Brain/
 │
-├── main.py              # Lógica core, conexión con Ollama y funciones base
-├── config.py            # Rutas seguras (BASE_DIRS) y URL de Ollama
-├── sandbox.py           # Resolución de rutas (Previene Path Traversal)
-├── gui.py               # Interfaz gráfica (Ejecuta esto para empezar)
-├── README.md            # Documentación
+├── main.py              # Core: Ollama + comandos base (leer, listar, txt)
+├── config.py            # Rutas del sandbox y configuración de Ollama
+├── sandbox.py           # Resolución segura de rutas (previene path traversal)
+├── gui.py               # Interfaz gráfica (punto de entrada principal)
+├── requirements.txt     # Dependencias del proyecto
 │
-├── tools/               # "Skills" del agente
-│   ├── word_tools.py    # Crea Words (básicos y complejos vía JSON)
-│   ├── excel_tools.py   # Crea Excels con múltiples hojas y auto-formato
-│   ├── ppt_tools.py     # Crea PowerPoint y reemplaza variables
-│   ├── web_ai_tools.py  # Conexión con ChatGPT Web usando Selenium
-│   ├── ai_tools.py      # Dispatcher: El "Cerebro" que entiende tus intenciones
-│
-├── outputs/             # Directorio principal donde el agente guarda tus archivos
-├── templates/           # Directorio para plantillas base de Office
-├── temp/                # Directorio para archivos temporales
+└── tools/               # Skills del agente
+    ├── ai_tools.py      # 🧠 Dispatcher + Deep Research para Word, Excel y PPT
+    ├── web_ai_tools.py  # 🌐 Conexión Selenium con Gemini y ChatGPT
+    ├── word_tools.py    # 📄 Generador Word con formato APA completo
+    ├── excel_tools.py   # 📊 Generador Excel multi-hoja con auto-formato
+    └── ppt_tools.py     # 📊 Generador PPT con slides, tablas y referencias
+```
+
+```text
+outputs/     # Archivos generados por el agente
+inputs/      # Archivos a analizar o mejorar
+templates/   # Plantillas base de Office
+temp/        # Archivos temporales
 ```
 
 ---
 
-## 2. Instalación
+## ⚙️ Tres Niveles de Generación
 
-### Paso 1: Instalar Ollama localmente
+El `dispatcher_ia` escala automáticamente la complejidad según tu instrucción:
+
+| Nivel | Activador | Motor | Descripción |
+|---|---|---|---|
+| **Básico** | Instrucción corta (<80 chars) | Ollama (local) | Rápido y privado. Sin internet. |
+| **Complejo** | Instrucción larga o keywords (`detallado`, `con referencias`, `formato apa`…) | Gemini (web) | Una llamada a Gemini, JSON estructurado. |
+| **Deep Research** | Keywords explícitas (`investiga a fondo`, `deep research`, `análisis profundo`, `reporte completo`, `con tablas de datos`…) | Gemini (web, iterativo) | Múltiples llamadas: primero planifica el índice, luego genera cada sección/hoja/slide por separado. |
+
+### Soporte completo por tipo de documento:
+
+| Tipo | Básico | Complejo | Deep Research |
+|---|---|---|---|
+| **Word** (.docx) | ✅ Ollama | ✅ Gemini JSON | ✅ Iterativo por secciones |
+| **Excel** (.xlsx) | ✅ Plantilla base | ✅ Gemini JSON | ✅ Iterativo hoja por hoja |
+| **PowerPoint** (.pptx) | ✅ Gemini JSON | ✅ Gemini JSON | ✅ Iterativo slide por slide |
+
+---
+
+## 📦 Instalación
+
+### Paso 1: Ollama (IA local opcional)
 1. Descarga e instala [Ollama](https://ollama.com/).
-2. Abre una terminal y descarga el modelo por defecto (`llama3`):
+2. Descarga el modelo `llama3`:
    ```bash
    ollama run llama3
    ```
-   *(Asegúrate de que Ollama esté ejecutándose en segundo plano, por defecto en `http://localhost:11434`)*
+   *(Ollama corre en `http://localhost:11434` por defecto. Se usa para clasificar intenciones y tareas simples.)*
 
-### Paso 2: Requisitos para IA Externa (Selenium)
-El módulo avanzado requiere tener **Google Chrome** instalado en tu PC. Selenium abrirá una ventana limpia para interactuar con ChatGPT por ti.
-*Nota: La primera vez que pidas una tarea compleja, es posible que la consola te pida iniciar sesión manualmente en ChatGPT. Solo tendrás que hacerlo una vez; la sesión se guarda en un perfil local dedicado (`ChromeBotProfile`).*
+### Paso 2: Google Chrome
+Selenium abre Chrome para interactuar con Gemini o ChatGPT. La primera vez que uses un skill avanzado, **inicia sesión manualmente** en la ventana que se abre; la sesión queda guardada en un perfil dedicado (`ChromeBotProfile`).
 
-### Paso 3: Configurar el entorno en Python
-1. Abre tu terminal (ej. Anaconda Prompt).
-2. Crea un entorno virtual (recomendado):
-   ```bash
-   conda create -n agente_ia python=3.11
-   conda activate agente_ia
-   ```
-3. Instala todas las dependencias:
-   ```bash
-   pip install -r requirements.txt
-   ```
+> **Motor por defecto: Gemini.** Si quieres usar ChatGPT explícitamente, menciona "chatgpt" en tu instrucción.
+
+### Paso 3: Entorno Python
+```bash
+conda create -n vader python=3.11
+conda activate vader
+pip install -r requirements.txt
+```
 
 ---
 
-## 3. Ejecución
+## 🚀 Ejecución
 
-Para abrir la interfaz amigable, simplemente ejecuta:
+Usa el lanzador automático (instala dependencias y abre la GUI):
+```bash
+iniciar_vader_brain.bat
+```
+
+O directamente:
 ```bash
 python gui.py
 ```
-Desde allí podrás ver tus archivos y escribir en la caja de texto lo que necesitas que el agente haga.
 
 ---
 
-## 4. Ejemplos de Uso "Mágicos"
+## 💬 Ejemplos de Instrucciones
 
-El `dispatcher_ia` es inteligente. Si tu instrucción es corta o básica, usará la IA Local (Ollama). **Si tu instrucción es larga (>80 caracteres), pide "investigar", crear algo "complejo" o menciona "noticias", activará automáticamente a ChatGPT.**
+### ⚡ Rápido (Ollama local)
+```
+Hazme un informe en word sobre finanzas descentralizadas.
+Muestra los archivos en la carpeta.
+```
 
-Además, **entiende cómo quieres llamar a los archivos** si lo pones entre comillas, e incluso añade fechas:
+### 🔵 Complejo (Gemini, una llamada)
+```
+Créame un word detallado sobre el mercado del litio en Chile con referencias APA.
+Crea una presentación sobre el futuro de la IA con datos reales.
+Genera un excel con datos reales sobre exportaciones chilenas del 2020 al 2024. Llámale 'Exportaciones_Chile'.
+```
 
-### ✨ Tareas Complejas (Se derivan a ChatGPT + Formato Office)
-- **PowerPoint estructurado:**
-  > *"Crear una ppt compleja sobre el futuro del trabajo y la inteligencia artificial."*
-- **Investigación extensa en Word con fecha y nombre:**
-  > *"Créame un word de las principales noticias del día sobre la guerra comercial entre potencias, y cómo se movieron las criptomonedas respecto a esto. Llámale al archivo 'Resumen Cripto' y añádele la fecha de hoy."*
-  *(El agente generará el archivo `Resumen_Cripto_2026-03-30.docx` usando ChatGPT y le dará formato de títulos y párrafos justificados).*
-- **Bases de datos en Excel:**
-  > *"Quiero un excel complejo sobre un balance financiero anual con ingresos y gastos en una hoja, y recursos humanos en otra. Llámale 'Balance Anual'."*
-- **Consulta directa web:**
-  > *"Pregúntale a chatgpt cómo se hace una tarta de manzana."*
+### 🔴 Deep Research (Gemini, iterativo — múltiples llamadas)
+```
+Investiga a fondo el impacto de la inteligencia artificial en el mercado laboral y hazme un word.
+Deep research sobre la adopción de criptomonedas en Latinoamérica en formato ppt.
+Análisis profundo del sistema financiero chileno con múltiples hojas en excel.
+Reporte completo sobre establecoins y su regulación global en word con tablas de datos.
+```
 
-### ⚡ Tareas Locales Rápidas (Usan Ollama)
-- **Gestión:**
-  > *"Muestra los archivos en la carpeta"*
-- **Creación básica:**
-  > *"Hazme un informe en word sobre finanzas descentralizadas."*
-- **Resumen:**
-  > *(Selecciona un archivo en la GUI)* -> *"Resume el archivo"*
+### 🔧 Otras acciones
+```
+Revisa el archivo reporte.txt y mejóralo.
+Resume la web https://www.bcch.cl/
+Pregúntale a gemini qué es la tasa de política monetaria.
+```
 
 ---
 
-## 5. Modo Desarrollador: Cómo agregar una nueva Función (SKILL)
+## 🧩 Modo Desarrollador: Añadir un nuevo Skill
 
-La arquitectura permite que agregar nuevas habilidades sea muy fácil. Aquí tienes un ejemplo para crear PDFs:
+La arquitectura es modular. Para añadir, por ejemplo, soporte a PDFs:
 
-**1. Crea la herramienta en `tools/`** (ej. `tools/pdf_tools.py`):
+**1. Crea la herramienta** en `tools/pdf_tools.py`:
 ```python
 from sandbox import resolve_path
 
 def crear_pdf_desde_json(filename, json_data):
     filepath = resolve_path(filename)
-    # logica para armar el PDF usando alguna librería como reportlab...
+    # lógica con reportlab...
     return f"PDF creado en {filepath}"
 ```
 
-**2. Orquesta la llamada a ChatGPT** en `tools/ai_tools.py`:
+**2. Crea la función de orquestación con Deep Research** en `tools/ai_tools.py`:
 ```python
-from tools.web_ai_tools import ask_chatgpt_web, limpiar_json_de_chatgpt
 from tools.pdf_tools import crear_pdf_desde_json
 
-def cmd_crear_pdf_complejo(instruccion, filename):
-    prompt = f"Genera un resumen en JSON sobre: {instruccion}. Formato: {{\"titulo\": \"...\", \"cuerpo\": \"...\"}}"
-    respuesta = ask_chatgpt_web(prompt)
-    if "❌ Error" in respuesta: return respuesta
-    return crear_pdf_desde_json(filename, limpiar_json_de_chatgpt(respuesta))
+def cmd_crear_pdf_deep_research(instruccion: str, filename: str, motor: str = "gemini") -> str:
+    # Paso 1: pedir índice de secciones
+    prompt_indice = (
+        f"Planifica las secciones de un PDF ejecutivo sobre: '{instruccion}'.\n"
+        f"CRÍTICO: Responde ÚNICAMENTE con array JSON. Sin markdown.\n"
+        f"[{{\"seccion\": \"1. Introducción\"}}, {{\"seccion\": \"2. Análisis\"}}]"
+    )
+    resp = enviar_a_ia_externa(prompt_indice, motor)
+    indice = json.loads(limpiar_json_de_chatgpt(resp))
+
+    # Paso 2: generar cada sección
+    pdf_json = []
+    for item in indice:
+        # ... prompt por sección y acumulación de bloques
+        pass
+
+    return crear_pdf_desde_json(filename, json.dumps(pdf_json))
 ```
 
-**3. Agrégalo al Dispatcher:**
+**3. Añádelo al Dispatcher** en `dispatcher_ia()`:
 ```python
-def dispatcher_ia(instruccion):
-    instruccion_lower = instruccion.lower()
-    # ... código existente ...
-
-    # NUEVO SKILL:
-    elif "pdf complejo" in instruccion_lower:
-        nombre_limpio = obtener_nombre_seguro(instruccion, "resumen_pdf")
-        return cmd_crear_pdf_complejo(instruccion, f"{nombre_limpio}.pdf")
+elif tipo_documento == "PDF":
+    tema, nombre_limpio = _extraer_tema_y_nombre("tema_general")
+    if es_deep_research:
+        return cmd_crear_pdf_deep_research(instruccion, f"{nombre_limpio}.pdf", motor=motor_ia)
+    # ...
 ```
-¡Y listo! Ya puedes pedirle al agente en la GUI: *"Haz un pdf complejo sobre la revolución industrial"*.
+
+---
+
+## 📋 Dependencias
+
+| Paquete | Uso |
+|---|---|
+| `python-docx` | Generación de documentos Word con formato APA |
+| `python-pptx` | Creación de presentaciones PowerPoint |
+| `openpyxl` | Generación y formato de archivos Excel |
+| `lxml` | Manipulación XML de celdas de tabla en PPT |
+| `customtkinter` | Interfaz gráfica moderna |
+| `selenium` | Automatización de Chrome para Gemini/ChatGPT |
+| `webdriver-manager` | Gestión automática del ChromeDriver |
+| `pyperclip` | Pegado de prompts en el navegador |
+| `requests` | Comunicación con Ollama API |
+| `beautifulsoup4` | Extracción de texto de páginas web |
+| `pandas` | Utilidades de datos |

@@ -24,6 +24,7 @@ FONT_BODY  = "Calibri"
 MAX_VIÑETAS_POR_SLIDE = 5     # Si hay más, se divide en slides extra
 MAX_CHARS_VIÑETA      = 120   # Truncar viñetas largas
 MAX_REFS_POR_SLIDE    = 6     # Referencias por slide de referencias
+MAX_FILAS_TABLA_SLIDE = 8     # Filas de datos por slide de tabla (sin encabezado)
 
 
 # ─────────────────────────────────────────────
@@ -222,6 +223,90 @@ def _build_referencias(prs: Presentation, refs: list):
             r_d.font.color.rgb = RGBColor(0x88, 0x88, 0x99)
 
 
+def _build_tabla_slide(prs: Presentation, titulo: str, headers: list, filas: list):
+    """
+    Crea uno o más slides con una tabla de datos cuando hay más de MAX_FILAS_TABLA_SLIDE filas.
+    Encabezados en azul acento, filas alternadas claro/oscuro.
+    """
+    from pptx.util import Pt, Inches, Emu
+    from pptx.dml.color import RGBColor
+
+    COLOR_HEADER_BG  = RGBColor(0x4F, 0xA3, 0xFF)  # Azul acento para encabezados
+    COLOR_HEADER_FG  = RGBColor(0xFF, 0xFF, 0xFF)  # Texto blanco en encabezado
+    COLOR_ROW_ODD    = RGBColor(0x1E, 0x2A, 0x45)  # Fila impar - azul oscuro
+    COLOR_ROW_EVEN   = RGBColor(0x15, 0x1E, 0x35)  # Fila par - aún más oscuro
+    COLOR_ROW_TEXT   = RGBColor(0xD8, 0xD8, 0xE8)  # Texto de filas
+
+    # Dividir filas en chunks si son muchas
+    chunks = [filas[i:i+MAX_FILAS_TABLA_SLIDE]
+              for i in range(0, max(len(filas), 1), MAX_FILAS_TABLA_SLIDE)]
+
+    total = len(chunks)
+    for idx, chunk in enumerate(chunks):
+        slide = _blank_slide(prs)
+        _set_slide_background(slide, COLOR_BG_DARK)
+        _add_accent_bar(slide, prs)
+
+        label = titulo if total == 1 else f"{titulo} ({idx+1}/{total})"
+        _add_title_textbox(slide, label, prs)
+
+        # Calcular dimensiones de la tabla
+        w, h = prs.slide_width, prs.slide_height
+        num_cols = len(headers) if headers else 1
+        num_rows = len(chunk) + 1  # +1 para encabezados
+
+        tbl_left   = Inches(0.4)
+        tbl_top    = Inches(1.5)
+        tbl_width  = w - Inches(0.8)
+        tbl_height = h - Inches(2.0)
+
+        table_shape = slide.shapes.add_table(
+            num_rows, num_cols,
+            tbl_left, tbl_top, tbl_width, tbl_height
+        )
+        table = table_shape.table
+
+        # Ajustar columnas de ancho igual
+        col_width = tbl_width // num_cols
+        for col in table.columns:
+            col.width = col_width
+
+        def _set_cell(cell, texto, bold=False, bg_color=None, fg_color=COLOR_ROW_TEXT, font_size=13):
+            cell.text = str(texto)
+            tf = cell.text_frame
+            tf.word_wrap = True
+            for para in tf.paragraphs:
+                para.alignment = PP_ALIGN.CENTER
+                for run in para.runs:
+                    run.font.size = Pt(font_size)
+                    run.font.bold = bold
+                    run.font.name = FONT_BODY
+                    run.font.color.rgb = fg_color
+            if bg_color:
+                from pptx.oxml.ns import qn
+                from lxml import etree
+                tc = cell._tc
+                tcPr = tc.get_or_add_tcPr()
+                # Eliminar relleno previo si existe
+                for existing in tcPr.findall(qn('a:solidFill')):
+                    tcPr.remove(existing)
+                solidFill = etree.SubElement(tcPr, qn('a:solidFill'))
+                srgbClr = etree.SubElement(solidFill, qn('a:srgbClr'))
+                srgbClr.set('val', f"{bg_color.red:02X}{bg_color.green:02X}{bg_color.blue:02X}")
+
+        # Fila de encabezados
+        for j, header in enumerate(headers[:num_cols]):
+            _set_cell(table.cell(0, j), header, bold=True,
+                      bg_color=COLOR_HEADER_BG, fg_color=COLOR_HEADER_FG, font_size=13)
+
+        # Filas de datos
+        for i, fila in enumerate(chunk):
+            row_color = COLOR_ROW_ODD if i % 2 == 0 else COLOR_ROW_EVEN
+            for j, valor in enumerate(fila[:num_cols]):
+                _set_cell(table.cell(i + 1, j), valor,
+                          bg_color=row_color, fg_color=COLOR_ROW_TEXT, font_size=12)
+
+
 # ─────────────────────────────────────────────
 # Funciones públicas
 # ─────────────────────────────────────────────
@@ -319,6 +404,10 @@ def crear_ppt_compleja_desde_json(filename: str, json_str: str, context: str = "
                 _build_portada(prs, titulo, slide_data.get("subtitulo", ""))
             elif tipo == "cita":
                 _build_cita(prs, slide_data.get("texto", titulo))
+            elif tipo == "tabla_slide":
+                headers = slide_data.get("headers", [])
+                filas   = slide_data.get("filas", [])
+                _build_tabla_slide(prs, titulo, headers, filas)
             else:  # contenido, indice
                 viñetas = slide_data.get("viñetas", slide_data.get("items", []))
                 _build_contenido(prs, titulo, viñetas)

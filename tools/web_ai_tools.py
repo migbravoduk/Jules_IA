@@ -243,8 +243,8 @@ def _enviar_prompt(
         else:
             stable_count = 0
             last_len = cur_len
-        print(f"Generando... {cur_len} chars (estabilidad {stable_count}/3)", end="\r")
-        if stable_count >= 3:
+        print(f"Generando... {cur_len} chars (estabilidad {stable_count}/5)", end="\r")
+        if stable_count >= 5:  # Umbral más alto para evitar cortes prematuros
             break
         time.sleep(2)
 
@@ -285,9 +285,27 @@ def ask_gemini_web(prompt: str) -> str:
             url="https://gemini.google.com/app",
             nombre_ia="Gemini",
             selector_caja_by=By.CSS_SELECTOR,
-            selector_caja_valor=".ql-editor[contenteditable='true'], rich-textarea [contenteditable='true']",
-            selector_respuesta_css="message-content",
-            selector_boton_enviar="button.send-button, button[aria-label='Enviar mensaje'], button[aria-label='Send message']",
+            # Múltiples candidatos para mayor robustez ante cambios de UI de Google
+            selector_caja_valor=(
+                ".ql-editor[contenteditable='true'], "
+                "rich-textarea [contenteditable='true'], "
+                "[data-placeholder][contenteditable='true'], "
+                "div.input-area-container [contenteditable='true']"
+            ),
+            selector_respuesta_css=(
+                "message-content, "
+                ".model-response-text, "
+                ".response-content"
+            ),
+            selector_boton_enviar=(
+                "button.send-button, "
+                "button[aria-label='Enviar mensaje'], "
+                "button[aria-label='Send message'], "
+                "button[mattooltip='Enviar mensaje'], "
+                "button[mattooltip='Send message']"
+            ),
+            timeout_espera_caja=75,   # Gemini a veces tarda más en cargar
+            timeout_respuesta=210,    # Respuestas largas de JSON pueden tardar más
         )
     except Exception as e:
         print(f"Error Gemini: {e}")
