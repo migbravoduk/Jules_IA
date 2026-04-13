@@ -258,3 +258,55 @@ def crear_word_complejo_desde_json(filename: str, json_str: str, context: str = 
         return f"Error parseando JSON de Word: {e}\nJSON Recibido:\n{json_str[:500]}"
     except Exception as e:
         return f"Error creando documento Word complejo: {e}"
+
+
+def extraer_texto_word(filename: str, context: str = "inputs") -> str:
+    """
+    Extrae el contenido completo de un archivo .docx de forma estructurada.
+    Preserva títulos, párrafos, listas y tablas como texto plano anotado.
+    Busca primero en 'inputs', luego en 'outputs'.
+    Retorna el texto extraído o un string que empieza con 'Error'.
+    """
+    # Intentar en el contexto dado, luego en outputs como fallback
+    for ctx in [context, "outputs", "inputs"]:
+        try:
+            filepath = resolve_path(filename, ctx)
+            if os.path.exists(filepath):
+                break
+        except:
+            continue
+    else:
+        return f"Error: No se encontró el archivo '{filename}' en inputs ni en outputs."
+
+    try:
+        doc = Document(filepath)
+        lineas = []
+
+        for para in doc.paragraphs:
+            texto = para.text.strip()
+            if not texto:
+                continue
+            estilo = para.style.name.lower() if para.style else ""
+            if "heading 1" in estilo or "título" in estilo:
+                lineas.append(f"# {texto}")
+            elif "heading 2" in estilo or "subtítulo" in estilo:
+                lineas.append(f"## {texto}")
+            elif "heading" in estilo:
+                lineas.append(f"### {texto}")
+            elif "list" in estilo or "bullet" in estilo:
+                lineas.append(f"- {texto}")
+            else:
+                lineas.append(texto)
+
+        # Extraer tablas
+        for i, tabla in enumerate(doc.tables):
+            lineas.append(f"\n[TABLA {i+1}]")
+            for fila in tabla.rows:
+                celdas = [c.text.strip() for c in fila.cells]
+                lineas.append(" | ".join(celdas))
+            lineas.append("")
+
+        return "\n".join(lineas)
+
+    except Exception as e:
+        return f"Error extrayendo texto de Word: {e}"

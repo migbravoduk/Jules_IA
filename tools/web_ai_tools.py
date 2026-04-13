@@ -145,19 +145,29 @@ def _enviar_prompt(
     timeout_espera_caja: int = 60,
     timeout_respuesta: int = 180,
 ) -> str:
-    """Motor universal: navega, pega el prompt y lee la respuesta."""
+    """Motor universal: navega, pega el prompt y lee la respuesta.
+    Robusto ante pérdida de foco del usuario (otro navegador abierto, etc.).
+    """
 
-    # 1. Navegar SIEMPRE a la URL de destino (incondicional)
+    # 1. Navegar SIEMPRE a la URL de destino y forzar foco de ventana
     print(f"Navegando hacia {nombre_ia}: {url}")
     try:
+        # Enfocar la ventana correcta de Chrome antes de navegar
+        for handle in driver.window_handles:
+            driver.switch_to.window(handle)
+            current = driver.current_url
+            if not current.startswith("chrome-extension://") and "devtools://" not in current:
+                break
         driver.maximize_window()
+        # Invocar el foco a nivel del sistema operativo via JS
+        driver.execute_script("window.focus();")
     except:
         pass
     driver.get(url)
-    time.sleep(3)
+    time.sleep(4)  # Pausa extra para carga completa (especialmente Gemini)
 
     # 2. Esperar la caja de texto
-    print(f"Buscando caja de texto en {nombre_ia}. Si ves un login o pop-up, completalo manualmente.")
+    print(f"Buscando caja de texto en {nombre_ia}...")
     text_area = None
     deadline = time.time() + timeout_espera_caja
 
@@ -174,46 +184,99 @@ def _enviar_prompt(
             time.sleep(1)
 
     if not text_area:
-        return f"Error: No se encontro la caja de chat de {nombre_ia} en {timeout_espera_caja}s. Hay un pop-up o login bloqueando?"
+        return f"❌ Error: No se encontro la caja de chat de {nombre_ia} en {timeout_espera_caja}s. ¿Hay un pop-up o login bloqueando?"
 
-    # 3. Pegar el prompt
+    # 3. Pegar el prompt con foco forzado (resistente a interferencia del usuario)
     print(f"Pegando prompt en {nombre_ia}...")
     pyperclip.copy(prompt)
-    try:
-        text_area.click()
-    except:
-        driver.execute_script("arguments[0].focus();", text_area)
-    time.sleep(0.4)
 
+    # Forzar foco sobre el elemento via JS antes de interactuar
+    try:
+        driver.execute_script("""
+            window.focus();
+            arguments[0].focus();
+            arguments[0].click();
+        """, text_area)
+    except:
+        pass
+    time.sleep(0.5)
+
+    # Intentar Ctrl+V (método principal)
     ctrl = Keys.COMMAND if (os.name == 'posix' and 'darwin' in os.uname().sysname.lower()) else Keys.CONTROL
+    texto_insertado = False
     try:
         text_area.send_keys(ctrl, 'v')
-    except Exception:
-        print("send_keys fallo, inyectando texto via JS...")
-        safe = prompt.replace('\\', '\\\\').replace('`', '\\`').replace('$', '\\$')
-        driver.execute_script("""
-            arguments[0].focus();
-            document.execCommand('insertText', false, arguments[1]);
-        """, text_area, safe)
+        time.sleep(0.8)
+        # Verificar que el texto se insertó revisando el contenido inner del elemento
+        contenido_actual = driver.execute_script(
+            "return arguments[0].innerText || arguments[0].value || '';", text_area
+        )
+        if len(contenido_actual.strip()) > 5:
+            texto_insertado = True
+            print(f"Texto insertado via Ctrl+V ({len(contenido_actual)} chars).")
+    except Exception as e:
+        print(f"Ctrl+V falló: {e}")
+
+    # Fallback 1: document.execCommand (funciona en contenteditable)
+    if not texto_insertado:
+        print("Intentando fallback execCommand...")
+        try:
+            driver.execute_script("""
+                arguments[0].focus();
+                document.execCommand('selectAll', false, null);
+                document.execCommand('insertText', false, arguments[1]);
+            """, text_area, prompt)
+            time.sleep(0.8)
+            contenido_actual = driver.execute_script(
+                "return arguments[0].innerText || arguments[0].value || '';", text_area
+            )
+            if len(contenido_actual.strip()) > 5:
+                texto_insertado = True
+                print(f"Texto insertado via execCommand ({len(contenido_actual)} chars).")
+        except Exception as e:
+            print(f"execCommand falló: {e}")
+
+    # Fallback 2: send_keys char por char (lento pero confiable)
+    if not texto_insertado:
+        print("Intentando fallback send_keys directo (puede ser lento)...")
+        try:
+            driver.execute_script("arguments[0].focus();", text_area)
+            # Enviar solo los primeros 4000 chars para no bloquear
+            text_area.send_keys(prompt[:4000])
+            texto_insertado = True
+        except Exception as e:
+            print(f"send_keys directo falló: {e}")
+
+    if not texto_insertado:
+        return f"❌ Error: No se pudo insertar el prompt en {nombre_ia} (todos los métodos fallaron)."
+
     time.sleep(0.8)
 
-    # 4. Enviar el prompt
+    # 4. Enviar el prompt (siempre por JS para evitar problemas de foco)
+    enviado = False
     if selector_boton_enviar:
         try:
-            print("Buscando boton de enviar...")
-            boton = WebDriverWait(driver, 6).until(
+            print("Buscando botón de enviar...")
+            boton = WebDriverWait(driver, 8).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, selector_boton_enviar))
             )
+            # JS click es más fiable que .click() cuando la ventana no tiene foco del OS
             driver.execute_script("arguments[0].click();", boton)
-            print("Boton de enviar presionado.")
-        except Exception:
-            print("Boton no encontrado, usando Enter como respaldo.")
-            try:
-                text_area.send_keys(Keys.ENTER)
-            except:
-                pass
-    else:
+            enviado = True
+            print("Botón de enviar presionado.")
+        except Exception as e:
+            print(f"Botón no encontrado ({e}), usando Enter como respaldo.")
+
+    if not enviado:
         try:
+            driver.execute_script("""
+                arguments[0].focus();
+                arguments[0].dispatchEvent(new KeyboardEvent('keydown', {
+                    key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true
+                }));
+            """, text_area)
+            time.sleep(0.3)
+            # Fallback final: send_keys Enter
             text_area.send_keys(Keys.ENTER)
         except:
             pass
@@ -227,7 +290,7 @@ def _enviar_prompt(
             EC.presence_of_element_located((By.CSS_SELECTOR, selector_respuesta_css))
         )
     except Exception:
-        return f"Error: {nombre_ia} no dio respuesta en {timeout_respuesta}s."
+        return f"❌ Error: {nombre_ia} no dio respuesta en {timeout_respuesta}s."
 
     stable_count = 0
     last_len = 0
@@ -244,7 +307,7 @@ def _enviar_prompt(
             stable_count = 0
             last_len = cur_len
         print(f"Generando... {cur_len} chars (estabilidad {stable_count}/5)", end="\r")
-        if stable_count >= 5:  # Umbral más alto para evitar cortes prematuros
+        if stable_count >= 5:
             break
         time.sleep(2)
 
