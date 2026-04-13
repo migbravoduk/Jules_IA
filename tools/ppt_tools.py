@@ -292,7 +292,7 @@ def _build_tabla_slide(prs: Presentation, titulo: str, headers: list, filas: lis
                     tcPr.remove(existing)
                 solidFill = etree.SubElement(tcPr, qn('a:solidFill'))
                 srgbClr = etree.SubElement(solidFill, qn('a:srgbClr'))
-                srgbClr.set('val', f"{bg_color.red:02X}{bg_color.green:02X}{bg_color.blue:02X}")
+                srgbClr.set('val', str(bg_color))
 
         # Fila de encabezados
         for j, header in enumerate(headers[:num_cols]):
