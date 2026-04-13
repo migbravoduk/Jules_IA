@@ -166,6 +166,30 @@ def _enviar_prompt(
     driver.get(url)
     time.sleep(4)  # Pausa extra para carga completa (especialmente Gemini)
 
+    # ─── Verificar que llegamos al destino correcto (no hubo redirección a login) ───
+    dominio_esperado = url.split("/")[2]  # ej: "gemini.google.com"
+    url_actual = driver.current_url
+    if dominio_esperado not in url_actual:
+        print(f"⚠️  Redirección detectada hacia: {url_actual}")
+        print(f"   Se esperaba llegar a '{dominio_esperado}' pero la página redirigió.")
+        print(f"   → Si ves una pantalla de login, inicia sesión en Chrome manualmente.")
+        print(f"   → El agente esperará hasta 2 minutos para que completes el login...")
+
+        deadline_login = time.time() + 120
+        while time.time() < deadline_login:
+            url_actual = driver.current_url
+            if dominio_esperado in url_actual:
+                print(f"✅ Login detectado. Continuando hacia {nombre_ia}...")
+                time.sleep(2)
+                break
+            time.sleep(2)
+        else:
+            return (
+                f"❌ Error: No se pudo acceder a {nombre_ia}.\n"
+                f"   La página redirigió a: {driver.current_url}\n"
+                f"   Inicia sesión manualmente en Chrome (perfil ChromeBotProfile) y vuelve a intentarlo."
+            )
+
     # 2. Esperar la caja de texto
     print(f"Buscando caja de texto en {nombre_ia}...")
     text_area = None
@@ -181,6 +205,10 @@ def _enviar_prompt(
             tiempo_restante = int(deadline - time.time())
             if tiempo_restante % 10 == 0:
                 print(f"Esperando caja de {nombre_ia}... ({tiempo_restante}s restantes)")
+            # Si durante la espera nos redirigen a login, avisar
+            url_ahora = driver.current_url
+            if dominio_esperado not in url_ahora and tiempo_restante % 15 == 0:
+                print(f"   ⚠️  El navegador está en '{url_ahora}'. ¿Necesitas iniciar sesión?")
             time.sleep(1)
 
     if not text_area:
