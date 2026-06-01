@@ -12,10 +12,11 @@ Cuenta con una **interfaz gráfica moderna** (`CustomTkinter`) y un sistema de *
 Vader_Brain/
 │
 ├── main.py              # Core: Ollama + comandos base (leer, listar, txt)
-├── config.py            # Rutas del sandbox y configuración de Ollama
+├── config.py            # Configuración central (Ollama, motor IA, timeouts, .env)
 ├── sandbox.py           # Resolución segura de rutas (previene path traversal)
 ├── gui.py               # Interfaz gráfica (punto de entrada principal)
 ├── requirements.txt     # Dependencias del proyecto
+├── .env.example         # Plantilla de configuración por variables de entorno
 │
 └── tools/               # Skills del agente
     ├── ai_tools.py      # 🧠 Dispatcher + Deep Research para Word, Excel y PPT
@@ -28,8 +29,8 @@ Vader_Brain/
 ```text
 outputs/     # Archivos generados por el agente
 inputs/      # Archivos a analizar o mejorar
-templates/   # Plantillas base de Office
 temp/        # Archivos temporales
+templates/   # (Reservado) Plantillas base de Office — aún no usado por el código
 ```
 
 ---
@@ -65,16 +66,24 @@ El `dispatcher_ia` escala automáticamente la complejidad según tu instrucción
    *(Ollama corre en `http://localhost:11434` por defecto. Se usa para clasificar intenciones y tareas simples.)*
 
 ### Paso 2: Google Chrome
-Selenium abre Chrome para interactuar con Gemini o ChatGPT. La primera vez que uses un skill avanzado, **inicia sesión manualmente** en la ventana que se abre; la sesión queda guardada en un perfil dedicado (`ChromeBotProfile`).
+Selenium abre Chrome para interactuar con Gemini o ChatGPT. La primera vez que uses un skill avanzado, **inicia sesión manualmente** en la ventana que se abre; la sesión queda guardada en un perfil dedicado.
 
-> **Motor por defecto: Gemini.** Si quieres usar ChatGPT explícitamente, menciona "chatgpt" en tu instrucción.
+- El perfil se guarda por defecto en `%LOCALAPPDATA%\VaderBrain\ChromeBotProfile` (Windows) o `~/.cache/VaderBrain/ChromeBotProfile` (otros). Puedes cambiarlo con la variable `CHROME_PROFILE_PATH`.
+- El bot **solo cierra las ventanas de Chrome que usan su propio perfil**; no toca tus demás ventanas de Chrome.
+- Si el inicio de sesión redirige a Google u OpenAI, el bot **espera hasta 3 minutos** a que inicies sesión manualmente y luego continúa.
+
+> **Motor por defecto: Gemini.** Si quieres usar ChatGPT explícitamente, menciona "chatgpt" en tu instrucción. El motor por defecto se puede cambiar con `MOTOR_IA_DEFECTO`.
 
 ### Paso 3: Entorno Python
 ```bash
-conda create -n vader python=3.11
-conda activate vader
+conda create -n agente_ia python=3.11
+conda activate agente_ia
 pip install -r requirements.txt
 ```
+> El lanzador `iniciar_vader_brain.bat` activa el entorno `agente_ia`. Si usas otro nombre, edítalo en el `.bat`.
+
+### Paso 4 (opcional): Configuración con `.env`
+Copia `.env.example` a `.env` y ajusta lo que necesites (modelo de Ollama, motor por defecto, timeouts, ruta del perfil de Chrome). Todas las claves tienen valores por defecto sensatos, así que el `.env` es opcional.
 
 ---
 
@@ -186,4 +195,4 @@ elif tipo_documento == "PDF":
 | `pyperclip` | Pegado de prompts en el navegador |
 | `requests` | Comunicación con Ollama API |
 | `beautifulsoup4` | Extracción de texto de páginas web |
-| `pandas` | Utilidades de datos |
+| `python-dotenv` | Carga opcional de configuración desde `.env` |
