@@ -8,8 +8,9 @@ from tools.web_ai_tools import ask_chatgpt_web, ask_gemini_web
 from tools.ppt_tools import crear_ppt_compleja_desde_json
 from tools.word_tools import crear_word_complejo_desde_json, extraer_texto_word
 from tools.excel_tools import crear_excel_complejo_desde_json
+from tools.format_tools import copiar_formato_word
 from main import ask_ollama # Para usar a Ollama como clasificador de intenciones
-from config import MOTOR_IA_DEFECTO
+from config import MOTOR_IA_DEFECTO, BASE_DIRS
 import re
 import json
 import datetime
@@ -655,6 +656,61 @@ def cmd_profundizar_word_con_gemini(filename: str, instruccion_adicional: str = 
     print(f"🏗️ [Profundizar Word] Ensamblando documento mejorado ({len(documento_final_json)} bloques)...")
     return crear_word_complejo_desde_json(nombre_salida, json.dumps(documento_final_json))
 
+def cmd_copiar_formato_word(instruccion: str) -> str:
+    """
+    Copia el formato de un documento Word EJEMPLO a un documento DESTINO.
+
+    Detecta dos nombres de archivo .docx en la instrucción:
+      - El PRIMERO es el ejemplo (la guía de formato, en 'templates/').
+      - El SEGUNDO es el destino a reformatear (en 'inputs/').
+
+    Si solo hay un .docx, asume que es el destino y que el ejemplo es el único
+    .docx presente en 'templates/'.
+    """
+    # Palabras conectoras que pueden quedar pegadas delante del nombre del archivo
+    _STOP = {
+        "copia", "copiar", "aplica", "aplicar", "usa", "usar", "replica",
+        "replicar", "clona", "clonar", "el", "la", "los", "las", "formato",
+        "formatos", "de", "del", "a", "al", "con", "y", "documento", "word",
+        "archivo", "mismo", "misma",
+    }
+
+    def _limpiar_nombre(bruto: str) -> str:
+        palabras = bruto.strip().split()
+        while palabras and palabras[0].lower() in _STOP:
+            palabras.pop(0)
+        return " ".join(palabras)
+
+    crudos = re.findall(r'([\wáéíóúñÁÉÍÓÚÑ][\w\-.áéíóúñÁÉÍÓÚÑ ]*?\.docx)',
+                        instruccion, re.IGNORECASE)
+    archivos = [n for n in (_limpiar_nombre(c) for c in crudos) if n]
+
+    if len(archivos) >= 2:
+        ejemplo, destino = archivos[0], archivos[1]
+        return copiar_formato_word(ejemplo, destino)
+
+    if len(archivos) == 1:
+        # Un solo archivo: es el destino; buscar el ejemplo en templates/
+        destino = archivos[0]
+        try:
+            ruta_templates = BASE_DIRS["templates"]
+            candidatos = [f.name for f in ruta_templates.iterdir()
+                          if f.is_file() and f.suffix.lower() == ".docx"]
+        except Exception:
+            candidatos = []
+        if len(candidatos) == 1:
+            return copiar_formato_word(candidatos[0], destino)
+        if not candidatos:
+            return ("No encontré un documento de ejemplo. Coloca el .docx con el "
+                    "formato deseado en la carpeta 'templates/' y vuelve a intentarlo.")
+        return ("Hay varios .docx en 'templates/'. Especifica cuál es el ejemplo, p. ej.:\n"
+                f"'copia el formato de {candidatos[0]} a {destino}'")
+
+    return ("Para copiar formato indica los dos archivos .docx, por ejemplo:\n"
+            "'copia el formato de guia.docx a informe.docx'\n"
+            "El ejemplo (guía) va en 'templates/' y el destino en 'inputs/'.")
+
+
 def dispatcher_ia(instruccion: str) -> str:
     """
     Dispatcher inteligente basado en palabras clave + clasificación Ollama.
@@ -669,6 +725,19 @@ def dispatcher_ia(instruccion: str) -> str:
     # --- LISTAR ---
     if "lista" in instruccion_lower or "mostrar archivos" in instruccion_lower:
         return cmd_listar()
+
+    # --- COPIAR FORMATO ENTRE WORDS ---
+    # (Se evalúa antes del enrutamiento por tipo, porque la instrucción suele
+    #  contener 'word'/'documento' y no debe crear un documento nuevo.)
+    KEYWORDS_FORMATO = [
+        "copia el formato", "copiar formato", "copia formato",
+        "aplica el formato", "aplicar formato", "aplica formato",
+        "mismo formato", "usa el formato", "usar el formato",
+        "replica el formato", "replicar formato", "clona el formato",
+        "copia los formatos", "copiar el formato",
+    ]
+    if any(kw in instruccion_lower for kw in KEYWORDS_FORMATO):
+        return cmd_copiar_formato_word(instruccion)
 
     # --- Detectar nivel de complejidad ---
     # Deep Research: keywords explícitas o combinación de largo + profundidad

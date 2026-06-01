@@ -23,7 +23,8 @@ Vader_Brain/
     ├── web_ai_tools.py  # 🌐 Conexión Selenium con Gemini y ChatGPT
     ├── word_tools.py    # 📄 Generador Word con formato APA completo
     ├── excel_tools.py   # 📊 Generador Excel multi-hoja con auto-formato
-    └── ppt_tools.py     # 📊 Generador PPT con slides, tablas y referencias
+    ├── ppt_tools.py     # 📊 Generador PPT con slides, tablas y referencias
+    └── format_tools.py  # 🎨 Copiador de formato entre documentos Word
 ```
 
 ```text
@@ -130,6 +131,22 @@ Revisa el archivo reporte.txt y mejóralo.
 Resume la web https://www.bcch.cl/
 Pregúntale a gemini qué es la tasa de política monetaria.
 ```
+
+### 🎨 Copiar formato entre documentos Word
+Aplica el formato de un documento **ejemplo** (guía de estilo) a otro documento **destino** ya escrito, identificando títulos, subtítulos, encabezados y cuerpo (modo **híbrido**: usa los estilos de Word si existen y, si no, los detecta por heurística).
+
+1. Coloca el documento con el formato deseado en `templates/` (p. ej. `guia.docx`).
+2. Coloca el documento a reformatear en `inputs/` (p. ej. `informe.docx`).
+3. Ejecuta:
+```
+Copia el formato de guia.docx a informe.docx
+Aplica el formato de Plantilla_APA.docx al documento mi_tesis.docx
+```
+El resultado se guarda en `outputs/` como `formateado_<destino>.docx`.
+
+**Qué se copia:** definiciones de estilo (Título, Subtítulo, Encabezado 1-3, Normal, listas), fuente por defecto, márgenes y configuración de página, y el estilo de las tablas.
+
+> 💡 **Para máxima precisión**, marca los títulos del documento destino con estilos de Word (Título, Encabezado 1, Encabezado 2…). El modo híbrido los respeta al 100 %. Para texto plano sin estilos, la skill los detecta por heurística (tamaño de fuente, negrita, longitud y numeración tipo `1.`, `1.1`), que es buena pero no infalible.
 
 ---
 

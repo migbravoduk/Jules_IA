@@ -67,6 +67,26 @@ Transliteración de acentos en nombres de archivo (á→a, ñ→n) para no perde
 
 ---
 
+## 3b. Skill nueva: Copiador de formato Word (`format_tools.py`)
+
+Aplica el formato de un documento **ejemplo** a un documento **destino** ya escrito.
+
+- **Modo híbrido** de identificación: usa los estilos de Word del destino si existen
+  (Título, Subtítulo, Encabezado 1-3) y, si no, los detecta por heurística (tamaño de
+  fuente relativo al cuerpo, negrita, longitud de línea y numeración `1.` / `1.1` / `1.1.1`).
+- **Copia completa** de formato: definiciones de estilo (`w:style`) + `docDefaults`,
+  márgenes y configuración de página, y estilo de tablas. El destino se renderiza con el
+  look exacto del ejemplo.
+- **Flujo de carpetas:** ejemplo en `templates/`, destino en `inputs/`, salida en `outputs/`.
+- **Dispatcher:** keywords `copia/aplica/usa el formato …` → `cmd_copiar_formato_word`,
+  evaluado antes del enrutamiento por tipo para no crear un documento nuevo.
+
+**Limitación conocida:** la heurística sobre texto plano (sin estilos) acierta en la
+mayoría de casos pero no es infalible; para control exacto, marcar los títulos del destino
+con estilos de Word. (En la hoja de ruta: botón en la GUI con dos selectores de archivo.)
+
+---
+
 ## 4. Hoja de ruta (pendiente)
 
 ### Corto plazo
@@ -75,6 +95,8 @@ Transliteración de acentos en nombres de archivo (á→a, ñ→n) para no perde
       página cada vez (más rápido y con contexto compartido).
 - [ ] **Barra de progreso** real en la GUI (X/Y secciones) además del log de texto.
 - [ ] Botón de **cancelar** la tarea en curso.
+- [ ] **Botón de GUI para el copiador de formato** (dos selectores de archivo: ejemplo + destino).
+- [ ] Mejorar la heurística del copiador (detección de listas y de subtítulo vs. título).
 
 ### Medio plazo
 - [ ] **Tests unitarios** del parser JSON, el sanitizador de nombres y los generadores Office.
