@@ -9,6 +9,7 @@ from tools.ppt_tools import crear_ppt_compleja_desde_json
 from tools.word_tools import crear_word_complejo_desde_json, extraer_texto_word
 from tools.excel_tools import crear_excel_complejo_desde_json
 from main import ask_ollama # Para usar a Ollama como clasificador de intenciones
+from config import MOTOR_IA_DEFECTO
 import re
 import json
 import datetime
@@ -58,14 +59,23 @@ def obtener_nombre_seguro(instruccion: str, fallback_tema: str) -> str:
         # lo truncamos a 40 caracteres máximo
         nombre = nombre[:40].strip()
 
-    # 2. Reemplazar espacios por guiones bajos
+    # 2. Transliterar acentos comunes del español (á→a, ñ→n, etc.)
+    #    para no perder palabras enteras al limpiar.
+    traduccion = str.maketrans("áéíóúüñÁÉÍÓÚÜÑ", "aeiouunAEIOUUN")
+    nombre = nombre.translate(traduccion)
+
+    # 3. Reemplazar espacios por guiones bajos
     nombre = nombre.replace(" ", "_")
 
-    # 3. Eliminar caracteres inválidos para Windows/Linux
+    # 4. Eliminar caracteres inválidos para Windows/Linux
     valid_chars = f"-_.() {string.ascii_letters}{string.digits}"
-    nombre_limpio = ''.join(c for c in nombre if c in valid_chars)
+    nombre_limpio = ''.join(c for c in nombre if c in valid_chars).strip("_-. ")
 
-    # 4. Añadir fecha si lo pide
+    # 5. Guarda: si tras limpiar queda vacío, usar un nombre por defecto
+    if not nombre_limpio:
+        nombre_limpio = "documento"
+
+    # 6. Añadir fecha si lo pide
     if "fecha de hoy" in instruccion.lower() or "añadele la fecha" in instruccion.lower() or "añádele la fecha" in instruccion.lower():
         fecha_str = datetime.datetime.now().strftime("%Y-%m-%d")
         nombre_limpio = f"{nombre_limpio}_{fecha_str}"
@@ -73,15 +83,92 @@ def obtener_nombre_seguro(instruccion: str, fallback_tema: str) -> str:
     return nombre_limpio
 
 def limpiar_json_de_chatgpt(respuesta: str) -> str:
-    """Limpia la respuesta de ChatGPT si viene con bloques Markdown de código."""
-    texto_json = respuesta.strip()
-    if texto_json.startswith("```json"):
-        texto_json = texto_json[7:]
-    elif texto_json.startswith("```"):
-         texto_json = texto_json[3:]
-    if texto_json.endswith("```"):
-        texto_json = texto_json[:-3]
-    return texto_json.strip()
+    """
+    Extrae el JSON de la respuesta de una IA web aunque venga rodeado de
+    texto introductorio, explicaciones o bloques markdown.
+
+    Estrategia:
+      1. Quita las vallas de código markdown (```json ... ```).
+      2. Si aún hay texto sobrante, localiza el primer '[' o '{' y su cierre
+         balanceado para recortar exactamente el array/objeto JSON.
+    """
+    texto = respuesta.strip()
+
+    # 1. Quitar vallas markdown en cualquier posición
+    if "```" in texto:
+        # Tomar el contenido entre la primera y la última valla si existen
+        partes = texto.split("```")
+        # partes impares suelen ser bloques de código
+        for parte in partes:
+            limpio = parte.strip()
+            if limpio.lower().startswith("json"):
+                limpio = limpio[4:].strip()
+            if limpio.startswith("[") or limpio.startswith("{"):
+                texto = limpio
+                break
+
+    # 2. Recortar al primer corchete/llave y su cierre balanceado
+    inicio = _primer_indice_json(texto)
+    if inicio is not None:
+        fin = _indice_cierre_balanceado(texto, inicio)
+        if fin is not None:
+            return texto[inicio:fin + 1].strip()
+
+    return texto.strip()
+
+
+def _primer_indice_json(texto: str):
+    """Devuelve el índice del primer '[' o '{', lo que aparezca antes."""
+    candidatos = [i for i in (texto.find("["), texto.find("{")) if i != -1]
+    return min(candidatos) if candidatos else None
+
+
+def _indice_cierre_balanceado(texto: str, inicio: int):
+    """
+    Dado el índice de un '[' o '{', encuentra el índice de su cierre
+    balanceado, ignorando corchetes dentro de cadenas JSON.
+    """
+    apertura = texto[inicio]
+    cierre = "]" if apertura == "[" else "}"
+    profundidad = 0
+    en_cadena = False
+    escape = False
+    for i in range(inicio, len(texto)):
+        c = texto[i]
+        if en_cadena:
+            if escape:
+                escape = False
+            elif c == "\\":
+                escape = True
+            elif c == '"':
+                en_cadena = False
+            continue
+        if c == '"':
+            en_cadena = True
+        elif c == apertura:
+            profundidad += 1
+        elif c == cierre:
+            profundidad -= 1
+            if profundidad == 0:
+                return i
+    return None
+
+
+def parsear_json_ia(respuesta: str):
+    """
+    Intenta parsear el JSON devuelto por la IA de forma tolerante.
+    Devuelve (datos, None) si tiene éxito o (None, mensaje_error) si falla.
+    """
+    texto = limpiar_json_de_chatgpt(respuesta)
+    try:
+        return json.loads(texto), None
+    except json.JSONDecodeError as e:
+        # Segundo intento: quitar comas finales antes de ] o }
+        texto2 = re.sub(r",\s*([\]}])", r"\1", texto)
+        try:
+            return json.loads(texto2), None
+        except json.JSONDecodeError:
+            return None, f"{e} | Fragmento: {texto[:300]}"
 
 def enviar_a_ia_externa(prompt: str, motor: str) -> str:
     """Envía el prompt a ChatGPT o Gemini según el motor seleccionado."""
@@ -194,10 +281,9 @@ def cmd_crear_excel_deep_research(instruccion: str, filename: str, motor: str = 
     resp_indice = enviar_a_ia_externa(prompt_indice, motor)
     if resp_indice.startswith("❌"): return resp_indice
 
-    try:
-        indice_hojas = json.loads(limpiar_json_de_chatgpt(resp_indice))
-    except Exception as e:
-        return f"Error en Deep Research Excel (No se pudo parsear índice): {e}\nRespuesta IA: {resp_indice[:300]}"
+    indice_hojas, err = parsear_json_ia(resp_indice)
+    if err:
+        return f"Error en Deep Research Excel (No se pudo parsear índice): {err}"
 
     if not indice_hojas:
         return "Error: El índice de hojas devuelto está vacío."
@@ -231,15 +317,15 @@ def cmd_crear_excel_deep_research(instruccion: str, filename: str, motor: str = 
             print(f"⚠️ Error generando hoja '{nombre_hoja}', saltando...")
             continue
 
-        try:
-            hoja_data = json.loads(limpiar_json_de_chatgpt(resp_hoja))
-            if isinstance(hoja_data, dict) and "hoja" in hoja_data and "datos" in hoja_data:
-                excel_final_json.append(hoja_data)
-            elif isinstance(hoja_data, list):
-                # A veces la IA devuelve un array directamente
-                excel_final_json.extend(hoja_data)
-        except Exception as e:
-            print(f"⚠️ Error parseando hoja '{nombre_hoja}': {e}")
+        hoja_data, err = parsear_json_ia(resp_hoja)
+        if err:
+            print(f"⚠️ Error parseando hoja '{nombre_hoja}': {err}")
+            continue
+        if isinstance(hoja_data, dict) and "hoja" in hoja_data and "datos" in hoja_data:
+            excel_final_json.append(hoja_data)
+        elif isinstance(hoja_data, list):
+            # A veces la IA devuelve un array directamente
+            excel_final_json.extend(hoja_data)
 
     if not excel_final_json:
         return "Error: No se pudo generar ningún dato para el Excel."
@@ -263,11 +349,9 @@ def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "
     resp_indice = enviar_a_ia_externa(prompt_indice, motor)
     if resp_indice.startswith("❌"): return resp_indice
 
-    try:
-        texto_json_indice = limpiar_json_de_chatgpt(resp_indice)
-        indice = json.loads(texto_json_indice)
-    except Exception as e:
-        return f"Error en Deep Research (No se pudo parsear el índice): {e}\nRespuesta IA: {resp_indice}"
+    indice, err = parsear_json_ia(resp_indice)
+    if err:
+        return f"Error en Deep Research (No se pudo parsear el índice): {err}"
 
     if not indice: return "Error: El índice devuelto está vacío."
 
@@ -311,20 +395,19 @@ def cmd_crear_word_deep_research(instruccion: str, filename: str, motor: str = "
             print(f"⚠️ Error generando sección '{tema_seccion}', saltando...")
             continue
 
-        try:
-            texto_json_seccion = limpiar_json_de_chatgpt(resp_seccion)
-            contenido_seccion = json.loads(texto_json_seccion)
-            if isinstance(contenido_seccion, list):
-                # Separar referencias para consolidarlas al final
-                for bloque in contenido_seccion:
-                    if bloque.get("tipo") == "referencias":
-                        referencias_globales.extend(bloque.get("items", []))
-                    else:
-                        documento_final_json.append(bloque)
-            else:
-                documento_final_json.append(contenido_seccion)
-        except Exception as e:
-            print(f"⚠️ Error parseando sección '{tema_seccion}': {e}")
+        contenido_seccion, err = parsear_json_ia(resp_seccion)
+        if err:
+            print(f"⚠️ Error parseando sección '{tema_seccion}': {err}")
+            continue
+        if isinstance(contenido_seccion, list):
+            # Separar referencias para consolidarlas al final
+            for bloque in contenido_seccion:
+                if isinstance(bloque, dict) and bloque.get("tipo") == "referencias":
+                    referencias_globales.extend(bloque.get("items", []))
+                else:
+                    documento_final_json.append(bloque)
+        else:
+            documento_final_json.append(contenido_seccion)
 
     # Añadir sección de Referencias consolidada al final
     if referencias_globales:
@@ -353,11 +436,11 @@ def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "g
     resp_indice = enviar_a_ia_externa(prompt_indice, motor)
     if resp_indice.startswith("❌"): return resp_indice
 
-    try:
-        texto_json_indice = limpiar_json_de_chatgpt(resp_indice)
-        indice = json.loads(texto_json_indice)
-    except Exception as e:
-         return f"Error en Deep Research PPT (No se pudo parsear índice): {e}\nRespuesta IA: {resp_indice[:400]}"
+    indice, err = parsear_json_ia(resp_indice)
+    if err:
+        return f"Error en Deep Research PPT (No se pudo parsear índice): {err}"
+    if not indice:
+        return "Error: El índice de la presentación está vacío."
 
     ppt_final_json = []
 
@@ -398,15 +481,14 @@ def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "g
         resp_slide = enviar_a_ia_externa(prompt_slide, motor)
         if resp_slide.startswith("❌"): continue
 
-        try:
-            texto_json_slide = limpiar_json_de_chatgpt(resp_slide)
-            contenido_slide = json.loads(texto_json_slide)
-            if isinstance(contenido_slide, list) and len(contenido_slide) > 0:
-                ppt_final_json.append(contenido_slide[0])
-            elif isinstance(contenido_slide, dict):
-                ppt_final_json.append(contenido_slide)
-        except Exception as e:
-            print(f"⚠️ Error parseando slide '{titulo_slide}': {e}")
+        contenido_slide, err = parsear_json_ia(resp_slide)
+        if err:
+            print(f"⚠️ Error parseando slide '{titulo_slide}': {err}")
+            continue
+        if isinstance(contenido_slide, list) and len(contenido_slide) > 0:
+            ppt_final_json.append(contenido_slide[0])
+        elif isinstance(contenido_slide, dict):
+            ppt_final_json.append(contenido_slide)
 
     # Pedir referencias al final en una sola llamada
     print("📚 [Deep Research PPT] Generando slide(s) de Referencias...")
@@ -419,12 +501,9 @@ def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "g
     )
     resp_refs = enviar_a_ia_externa(prompt_refs, motor)
     if not resp_refs.startswith("❌"):
-        try:
-            refs_json = json.loads(limpiar_json_de_chatgpt(resp_refs))
-            if isinstance(refs_json, dict):
-                ppt_final_json.append(refs_json)
-        except Exception:
-            pass
+        refs_json, _ = parsear_json_ia(resp_refs)
+        if isinstance(refs_json, dict):
+            ppt_final_json.append(refs_json)
 
     print(f"🏗️ [Deep Research] Ensamblando presentación de {len(ppt_final_json)} slides...")
     return crear_ppt_compleja_desde_json(filename, json.dumps(ppt_final_json))
@@ -506,10 +585,9 @@ def cmd_profundizar_word_con_gemini(filename: str, instruccion_adicional: str = 
     resp_indice = enviar_a_ia_externa(prompt_indice, motor)
     if resp_indice.startswith("❌"): return resp_indice
 
-    try:
-        indice = json.loads(limpiar_json_de_chatgpt(resp_indice))
-    except Exception as e:
-        return f"Error al planificar mejoras: {e}\nRespuesta: {resp_indice[:300]}"
+    indice, err = parsear_json_ia(resp_indice)
+    if err:
+        return f"Error al planificar mejoras: {err}"
 
     if not indice:
         return "Error: El índice de mejoras está vacío."
@@ -555,16 +633,16 @@ def cmd_profundizar_word_con_gemini(filename: str, instruccion_adicional: str = 
             print(f"⚠️ Error en sección '{seccion}', saltando...")
             continue
 
-        try:
-            bloques = json.loads(limpiar_json_de_chatgpt(resp_seccion))
-            if isinstance(bloques, list):
-                for b in bloques:
-                    if b.get("tipo") == "referencias":
-                        referencias_globales.extend(b.get("items", []))
-                    else:
-                        documento_final_json.append(b)
-        except Exception as e:
-            print(f"⚠️ Error parseando sección '{seccion}': {e}")
+        bloques, err = parsear_json_ia(resp_seccion)
+        if err:
+            print(f"⚠️ Error parseando sección '{seccion}': {err}")
+            continue
+        if isinstance(bloques, list):
+            for b in bloques:
+                if isinstance(b, dict) and b.get("tipo") == "referencias":
+                    referencias_globales.extend(b.get("items", []))
+                else:
+                    documento_final_json.append(b)
 
     # Agregar referencias consolidadas
     if referencias_globales:
@@ -610,16 +688,21 @@ def dispatcher_ia(instruccion: str) -> str:
     ]
     es_complejo = es_deep_research or len(instruccion) > 80 or any(kw in instruccion_lower for kw in KEYWORDS_COMPLEJO)
 
-    motor_ia = "chatgpt" if "chatgpt" in instruccion_lower else "gemini"
+    motor_ia = "chatgpt" if "chatgpt" in instruccion_lower else MOTOR_IA_DEFECTO
 
-    # Clasificar tipo de documento con Ollama (o fallback semántico)
-    tipo_documento = clasificar_intencion_con_ollama(instruccion)
+    # Clasificar tipo de documento. Primero por palabras clave (rápido y sin
+    # dependencias); solo si es ambiguo se consulta a Ollama.
+    tipo_documento = "DESCONOCIDO"
+    if any(kw in instruccion_lower for kw in ["word", "informe", "reporte", "documento", "memo", ".docx"]):
+        tipo_documento = "WORD"
+    elif any(kw in instruccion_lower for kw in ["excel", "hoja de cálculo", "hoja de calculo", "tabla de datos", "base de datos", "dataset", ".xlsx"]):
+        tipo_documento = "EXCEL"
+    elif any(kw in instruccion_lower for kw in ["ppt", "presentación", "presentacion", "powerpoint", "diapositivas", "slides", ".pptx"]):
+        tipo_documento = "PPT"
 
-    # Fallback semántico si Ollama falla o responde DESCONOCIDO
+    # Si las keywords no resolvieron el tipo, recurrir a Ollama como clasificador.
     if tipo_documento == "DESCONOCIDO":
-        if any(kw in instruccion_lower for kw in ["word", "informe", "reporte", "documento", "memo"]): tipo_documento = "WORD"
-        elif any(kw in instruccion_lower for kw in ["excel", "hoja de cálculo", "tabla de datos", "base de datos", "dataset"]): tipo_documento = "EXCEL"
-        elif any(kw in instruccion_lower for kw in ["ppt", "presentación", "presentacion", "powerpoint", "diapositivas", "slides"]): tipo_documento = "PPT"
+        tipo_documento = clasificar_intencion_con_ollama(instruccion)
 
     # ─── Helper: extraer tema y nombre de archivo ───
     def _extraer_tema_y_nombre(fallback: str):

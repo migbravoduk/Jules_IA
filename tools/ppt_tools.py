@@ -1,11 +1,11 @@
 from pptx import Presentation
-from pptx.util import Inches, Pt, Emu
+from pptx.util import Inches, Pt
 from pptx.dml.color import RGBColor
 from pptx.enum.text import PP_ALIGN
+from pptx.enum.shapes import MSO_SHAPE
 from sandbox import resolve_path
 import os
 import json
-import textwrap
 
 # ─────────────────────────────────────────────
 # Constantes de diseño
@@ -33,9 +33,6 @@ MAX_FILAS_TABLA_SLIDE = 8     # Filas de datos por slide de tabla (sin encabezad
 
 def _set_slide_background(slide, color: RGBColor):
     """Rellena el fondo del slide con un color sólido."""
-    from pptx.oxml.ns import qn
-    from lxml import etree
-
     background = slide.background
     fill = background.fill
     fill.solid()
@@ -87,7 +84,7 @@ def _add_body_textbox(slide, lines: list, prs: Presentation, top_offset: float =
 def _add_accent_bar(slide, prs: Presentation):
     """Añade una barra de color en la parte izquierda del slide."""
     bar = slide.shapes.add_shape(
-        1,  # MSO_SHAPE_TYPE.RECTANGLE
+        MSO_SHAPE.RECTANGLE,
         Inches(0), Inches(0),
         Inches(0.12), prs.slide_height
     )
@@ -228,9 +225,6 @@ def _build_tabla_slide(prs: Presentation, titulo: str, headers: list, filas: lis
     Crea uno o más slides con una tabla de datos cuando hay más de MAX_FILAS_TABLA_SLIDE filas.
     Encabezados en azul acento, filas alternadas claro/oscuro.
     """
-    from pptx.util import Pt, Inches, Emu
-    from pptx.dml.color import RGBColor
-
     COLOR_HEADER_BG  = RGBColor(0x4F, 0xA3, 0xFF)  # Azul acento para encabezados
     COLOR_HEADER_FG  = RGBColor(0xFF, 0xFF, 0xFF)  # Texto blanco en encabezado
     COLOR_ROW_ODD    = RGBColor(0x1E, 0x2A, 0x45)  # Fila impar - azul oscuro

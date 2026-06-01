@@ -1,5 +1,7 @@
 import os
 import time
+import subprocess
+import urllib.request
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -10,25 +12,47 @@ from selenium.webdriver.support import expected_conditions as EC
 from webdriver_manager.chrome import ChromeDriverManager
 import pyperclip
 
+from config import (
+    CHROME_PROFILE_PATH,
+    TIMEOUT_ESPERA_CAJA,
+    TIMEOUT_RESPUESTA,
+    TIMEOUT_LOGIN_MANUAL,
+)
+
 # ---------------------------------------------------------------------------
 # Utilidades de Chrome
 # ---------------------------------------------------------------------------
 
 def _get_profile_path() -> str:
     """Retorna la ruta del perfil dedicado de Chrome para el bot."""
-    if os.name == 'nt':
-        desktop = os.path.join(os.environ.get('USERPROFILE', ''), 'Desktop')
-    else:
-        desktop = os.path.expanduser("~")
-    return os.path.join(desktop, "ChromeBotProfile")
+    os.makedirs(CHROME_PROFILE_PATH, exist_ok=True)
+    return CHROME_PROFILE_PATH
 
-def _cerrar_chrome_forzado():
-    """Mata todos los procesos de Chrome en Windows para liberar el perfil."""
+
+def _cerrar_chrome_del_perfil(profile_path: str):
+    """
+    Cierra ÚNICAMENTE los procesos de Chrome que están usando el perfil del bot,
+    para liberar el lock del perfil sin tocar las demás ventanas de Chrome del
+    usuario. En versiones antiguas de Windows recurre a un filtrado por título.
+    """
+    if os.name != 'nt':
+        return
+    # Marcador único de la ruta del perfil para identificar SOLO el Chrome del bot.
+    marcador = os.path.basename(profile_path.rstrip("\\/")) or "ChromeBotProfile"
+    ps_cmd = (
+        "Get-CimInstance Win32_Process -Filter \"Name='chrome.exe'\" | "
+        f"Where-Object {{ $_.CommandLine -like '*{marcador}*' }} | "
+        "ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }"
+    )
     try:
-        os.system("taskkill /f /im chrome.exe /T >nul 2>&1")
-    except:
-        pass
+        subprocess.run(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=15
+        )
+    except Exception as e:
+        print(f"No se pudo cerrar el Chrome del perfil del bot: {e}")
     time.sleep(1)
+
 
 def _abrir_chrome_debug_mode(profile_path: str) -> bool:
     """
@@ -36,15 +60,12 @@ def _abrir_chrome_debug_mode(profile_path: str) -> bool:
     Este metodo es el mas robusto contra Cloudflare porque usa el ejecutable
     real de Chrome en un proceso separado al de webdriver.
     """
-    import subprocess
-    import urllib.request
-
     # 1. Verificar si ya esta corriendo en el puerto 9222
     try:
         urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=1)
         print("Chrome en modo debug ya esta corriendo.")
         return True
-    except:
+    except Exception:
         pass
 
     # 2. Buscar el ejecutable de Chrome
@@ -66,15 +87,22 @@ def _abrir_chrome_debug_mode(profile_path: str) -> bool:
         print("No se encontro la ruta de Chrome nativo.")
         return False
 
-    # 3. Cerrar instancias huerfanas y levantar Chrome nuevo
-    if os.name == 'nt':
-        _cerrar_chrome_forzado()
+    # 3. Cerrar SOLO instancias previas del bot (no las del usuario) y levantar Chrome
+    _cerrar_chrome_del_perfil(profile_path)
 
     comando = f'"{chrome_path}" --remote-debugging-port=9222 --user-data-dir="{profile_path}"'
     print("Levantando sesion nativa de Chrome en puerto 9222...")
     subprocess.Popen(comando, shell=True)
-    time.sleep(4)
+
+    # Esperar a que el puerto de depuración responda (hasta ~10s)
+    for _ in range(20):
+        try:
+            urllib.request.urlopen("http://127.0.0.1:9222/json", timeout=1)
+            return True
+        except Exception:
+            time.sleep(0.5)
     return True
+
 
 def _crear_driver(profile_path: str):
     """Crea y retorna un objeto WebDriver conectado a la sesion nativa."""
@@ -129,6 +157,45 @@ def _invalidar_driver():
     global _shared_driver
     _shared_driver = None
 
+
+def _esperar_login_manual(driver, dominio_esperado: str, nombre_ia: str) -> bool:
+    """
+    Cuando se detecta una pantalla de login (Google u OpenAI), pausa y espera a
+    que el usuario inicie sesion manualmente en la ventana de Chrome.
+    Devuelve True si tras el login se llegó al dominio esperado.
+    """
+    print(f"  Pantalla de login de {nombre_ia} detectada.")
+    print(f"  Inicia sesion manualmente en la ventana de Chrome "
+          f"(espera hasta {TIMEOUT_LOGIN_MANUAL}s)...")
+    deadline = time.time() + TIMEOUT_LOGIN_MANUAL
+    while time.time() < deadline:
+        if dominio_esperado in driver.current_url:
+            print("[OK] Login completado. Continuando...")
+            return True
+        time.sleep(2)
+    return False
+
+
+def _es_pantalla_de_login(url: str, nombre_ia: str) -> bool:
+    """Detecta URLs de login/autenticación de Google y OpenAI/ChatGPT."""
+    url_l = url.lower()
+    patrones_comunes = ["accounts.google.com", "google.com/signin"]
+    patrones_chatgpt = ["auth.openai.com", "auth0.openai.com", "/auth/login", "login.openai", "platform.openai.com/login"]
+    patrones = patrones_comunes + (patrones_chatgpt if nombre_ia.lower() == "chatgpt" else [])
+    return any(p in url_l for p in patrones)
+
+
+def _es_cloudflare(driver) -> bool:
+    """Heurística para detectar el reto 'Just a moment...' de Cloudflare."""
+    try:
+        titulo = (driver.title or "").lower()
+        if "just a moment" in titulo or "un momento" in titulo:
+            return True
+        cuerpo = driver.find_elements(By.CSS_SELECTOR, "#challenge-running, #cf-challenge-running")
+        return len(cuerpo) > 0
+    except Exception:
+        return False
+
 # ---------------------------------------------------------------------------
 # Motor generico de interaccion con cualquier IA web
 # ---------------------------------------------------------------------------
@@ -142,12 +209,17 @@ def _enviar_prompt(
     selector_caja_valor: str,
     selector_respuesta_css: str,
     selector_boton_enviar: str = None,
-    timeout_espera_caja: int = 60,
-    timeout_respuesta: int = 180,
+    selector_boton_stop: str = None,
+    timeout_espera_caja: int = None,
+    timeout_respuesta: int = None,
 ) -> str:
     """Motor universal: navega, pega el prompt y lee la respuesta.
-    Robusto ante pérdida de foco del usuario (otro navegador abierto, etc.).
+    Robusto ante pérdida de foco del usuario, login y Cloudflare.
     """
+    if timeout_espera_caja is None:
+        timeout_espera_caja = TIMEOUT_ESPERA_CAJA
+    if timeout_respuesta is None:
+        timeout_respuesta = TIMEOUT_RESPUESTA
 
     # 1. Navegacion robusta: 3 metodos en cascada con verificacion de URL
     #    driver.get() en modo debug puede ejecutarse sin que Chrome navegue visualmente.
@@ -159,14 +231,11 @@ def _enviar_prompt(
         print(f"[Nav {intento+1}/3] Destino: {url} | URL actual: {url_antes}")
         try:
             if intento == 0:
-                # Metodo 1: driver.get() estandar
                 driver.get(url)
             elif intento == 1:
-                # Metodo 2: JS window.location.href
                 print("  Intentando via JS window.location.href...")
                 driver.execute_script("window.location.href = arguments[0];", url)
             else:
-                # Metodo 3: Nueva pestana + driver.get()
                 print("  Abriendo nueva pestana y navegando...")
                 driver.execute_script("window.open('');")
                 time.sleep(1)
@@ -180,23 +249,23 @@ def _enviar_prompt(
         url_actual = driver.current_url
         print(f"  URL post-navegacion: {url_actual}")
 
-        if dominio_esperado in url_actual:
+        # Cloudflare: dar tiempo a que se resuelva el reto
+        if _es_cloudflare(driver):
+            print("  Reto de Cloudflare detectado. Esperando resolución (hasta 30s)...")
+            cf_deadline = time.time() + 30
+            while time.time() < cf_deadline and _es_cloudflare(driver):
+                time.sleep(2)
+            url_actual = driver.current_url
+
+        if dominio_esperado in url_actual and not _es_pantalla_de_login(url_actual, nombre_ia):
             print(f"[OK] Navegacion exitosa hacia {nombre_ia}.")
             navegado = True
             break
 
-        # Detectar pantalla de login de Google
-        if "accounts.google.com" in url_actual or "google.com/signin" in url_actual:
-            print("  Login de Google detectado.")
-            print("  Inicia sesion manualmente en la ventana de Chrome (espera hasta 2 min)...")
-            deadline_login = time.time() + 120
-            while time.time() < deadline_login:
-                if dominio_esperado in driver.current_url:
-                    print("[OK] Login completado. Continuando...")
-                    navegado = True
-                    break
-                time.sleep(2)
-            if navegado:
+        # Detectar pantalla de login (Google u OpenAI según el motor)
+        if _es_pantalla_de_login(url_actual, nombre_ia):
+            if _esperar_login_manual(driver, dominio_esperado, nombre_ia):
+                navegado = True
                 break
 
         print("  URL no corresponde al dominio esperado, reintentando...")
@@ -204,7 +273,7 @@ def _enviar_prompt(
     if not navegado:
         _invalidar_driver()
         return (
-            "Error: No se pudo navegar a " + nombre_ia + " tras 3 intentos. "
+            "❌ Error: No se pudo navegar a " + nombre_ia + " tras 3 intentos. "
             "URL final: " + driver.current_url + ". "
             "Se reiniciara Chrome en el siguiente intento."
         )
@@ -222,14 +291,15 @@ def _enviar_prompt(
                 EC.element_to_be_clickable((selector_caja_by, selector_caja_valor))
             )
             break
-        except:
+        except Exception:
             tiempo_restante = int(deadline - time.time())
             if tiempo_restante % 10 == 0:
                 print(f"Esperando caja de {nombre_ia}... ({tiempo_restante}s restantes)")
-            # Si durante la espera nos redirigen a login, avisar
+            # Si durante la espera nos redirigen a login, gestionarlo
             url_ahora = driver.current_url
-            if dominio_esperado not in url_ahora and tiempo_restante % 15 == 0:
-                print(f"   ⚠️  El navegador está en '{url_ahora}'. ¿Necesitas iniciar sesión?")
+            if _es_pantalla_de_login(url_ahora, nombre_ia):
+                if _esperar_login_manual(driver, dominio_esperado, nombre_ia):
+                    deadline = time.time() + timeout_espera_caja  # reiniciar la espera
             time.sleep(1)
 
     if not text_area:
@@ -239,14 +309,13 @@ def _enviar_prompt(
     print(f"Pegando prompt en {nombre_ia}...")
     pyperclip.copy(prompt)
 
-    # Forzar foco sobre el elemento via JS antes de interactuar
     try:
         driver.execute_script("""
             window.focus();
             arguments[0].focus();
             arguments[0].click();
         """, text_area)
-    except:
+    except Exception:
         pass
     time.sleep(0.5)
 
@@ -256,7 +325,6 @@ def _enviar_prompt(
     try:
         text_area.send_keys(ctrl, 'v')
         time.sleep(0.8)
-        # Verificar que el texto se insertó revisando el contenido inner del elemento
         contenido_actual = driver.execute_script(
             "return arguments[0].innerText || arguments[0].value || '';", text_area
         )
@@ -290,7 +358,6 @@ def _enviar_prompt(
         print("Intentando fallback send_keys directo (puede ser lento)...")
         try:
             driver.execute_script("arguments[0].focus();", text_area)
-            # Enviar solo los primeros 4000 chars para no bloquear
             text_area.send_keys(prompt[:4000])
             texto_insertado = True
         except Exception as e:
@@ -309,7 +376,6 @@ def _enviar_prompt(
             boton = WebDriverWait(driver, 8).until(
                 EC.element_to_be_clickable((By.CSS_SELECTOR, selector_boton_enviar))
             )
-            # JS click es más fiable que .click() cuando la ventana no tiene foco del OS
             driver.execute_script("arguments[0].click();", boton)
             enviado = True
             print("Botón de enviar presionado.")
@@ -325,9 +391,8 @@ def _enviar_prompt(
                 }));
             """, text_area)
             time.sleep(0.3)
-            # Fallback final: send_keys Enter
             text_area.send_keys(Keys.ENTER)
-        except:
+        except Exception:
             pass
 
     time.sleep(2)
@@ -341,28 +406,54 @@ def _enviar_prompt(
     except Exception:
         return f"❌ Error: {nombre_ia} no dio respuesta en {timeout_respuesta}s."
 
+    respuesta_final = _leer_respuesta_estable(
+        driver, selector_respuesta_css, selector_boton_stop, timeout_respuesta
+    )
+    print(f"\nRespuesta de {nombre_ia} recibida ({len(respuesta_final)} chars).")
+    if not respuesta_final.strip():
+        return f"❌ Error: {nombre_ia} devolvió una respuesta vacía."
+    return respuesta_final
+
+
+def _leer_respuesta_estable(driver, selector_respuesta_css, selector_boton_stop, timeout_respuesta) -> str:
+    """
+    Lee el último bloque de respuesta esperando a que el texto se estabilice.
+    Si se conoce el botón de 'detener generación', su desaparición confirma el fin.
+    """
     stable_count = 0
     last_len = 0
-    for _ in range(150):
+    max_iteraciones = max(int(timeout_respuesta / 2), 60)
+    for _ in range(max_iteraciones):
         bloques = driver.find_elements(By.CSS_SELECTOR, selector_respuesta_css)
         if not bloques:
             time.sleep(1)
             continue
         texto = bloques[-1].text
         cur_len = len(texto)
+
+        # ¿Sigue generando? (botón stop visible)
+        generando = False
+        if selector_boton_stop:
+            try:
+                generando = len(driver.find_elements(By.CSS_SELECTOR, selector_boton_stop)) > 0
+            except Exception:
+                generando = False
+
         if cur_len == last_len and cur_len > 15:
             stable_count += 1
         else:
             stable_count = 0
             last_len = cur_len
+
         print(f"Generando... {cur_len} chars (estabilidad {stable_count}/5)", end="\r")
-        if stable_count >= 5:
+
+        # Fin: texto estable y, si lo conocemos, sin botón de stop
+        if stable_count >= 5 and not generando:
             break
         time.sleep(2)
 
-    respuesta_final = driver.find_elements(By.CSS_SELECTOR, selector_respuesta_css)[-1].text
-    print(f"\nRespuesta de {nombre_ia} recibida ({len(respuesta_final)} chars).")
-    return respuesta_final
+    bloques = driver.find_elements(By.CSS_SELECTOR, selector_respuesta_css)
+    return bloques[-1].text if bloques else ""
 
 # ---------------------------------------------------------------------------
 # Funciones publicas por IA
@@ -381,11 +472,12 @@ def ask_chatgpt_web(prompt: str) -> str:
             selector_caja_valor="prompt-textarea",
             selector_respuesta_css="div[data-message-author-role='assistant']",
             selector_boton_enviar="button[data-testid='send-button']",
+            selector_boton_stop="button[data-testid='stop-button'], button[aria-label='Detener generación'], button[aria-label='Stop generating']",
         )
     except Exception as e:
         print(f"Error ChatGPT: {e}")
         _invalidar_driver()
-        return f"Error ejecutando ChatGPT Web: {e}"
+        return f"❌ Error ejecutando ChatGPT Web: {e}"
 
 def ask_gemini_web(prompt: str) -> str:
     """Envia un prompt a Gemini y devuelve la respuesta en texto."""
@@ -416,13 +508,18 @@ def ask_gemini_web(prompt: str) -> str:
                 "button[mattooltip='Enviar mensaje'], "
                 "button[mattooltip='Send message']"
             ),
-            timeout_espera_caja=75,   # Gemini a veces tarda más en cargar
-            timeout_respuesta=210,    # Respuestas largas de JSON pueden tardar más
+            selector_boton_stop=(
+                "button[aria-label='Detener respuesta'], "
+                "button[aria-label='Stop response'], "
+                "button.stop"
+            ),
+            timeout_espera_caja=max(TIMEOUT_ESPERA_CAJA, 75),  # Gemini tarda más en cargar
+            timeout_respuesta=max(TIMEOUT_RESPUESTA, 210),     # Respuestas largas de JSON
         )
     except Exception as e:
         print(f"Error Gemini: {e}")
         _invalidar_driver()
-        return f"Error ejecutando Gemini Web: {e}"
+        return f"❌ Error ejecutando Gemini Web: {e}"
 
 # ---------------------------------------------------------------------------
 # Test rapido
