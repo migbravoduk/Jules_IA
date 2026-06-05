@@ -1,10 +1,11 @@
 python-docx>=1.1.0
 openpyxl>=3.1.2
 python-pptx>=1.0.0
+lxml>=4.9.0
 requests>=2.31.0
 beautifulsoup4>=4.12.3
-pandas>=2.0.0
 customtkinter>=5.2.2
 selenium>=4.0.0
 webdriver-manager>=4.0.0
 pyperclip>=1.8.0
+python-dotenv>=1.0.0

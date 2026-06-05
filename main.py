@@ -1,11 +1,16 @@
 import os
 import json
-import requests
-from bs4 import BeautifulSoup
-from config import BASE_DIRS, OLLAMA_URL, OLLAMA_MODEL
-from sandbox import resolve_path
 import webbrowser
 from pathlib import Path
+import requests
+from bs4 import BeautifulSoup
+
+from config import BASE_DIRS, OLLAMA_URL, OLLAMA_MODEL, OLLAMA_TIMEOUT
+from sandbox import resolve_path
+from tools.word_tools import crear_documento_profesional, aplicar_formato_word
+from tools.excel_tools import escribir_excel, aplicar_formato_excel, actualizar_excel_existente
+from tools.ppt_tools import actualizar_ppt, crear_ppt_base
+
 
 # --- CORE ---
 def ask_ollama(prompt: str, model: str = OLLAMA_MODEL) -> str:
@@ -17,16 +22,13 @@ def ask_ollama(prompt: str, model: str = OLLAMA_MODEL) -> str:
     }
 
     try:
-        response = requests.post(OLLAMA_URL, json=payload, timeout=60)
+        response = requests.post(OLLAMA_URL, json=payload, timeout=OLLAMA_TIMEOUT)
         response.raise_for_status()
         result = response.json()
         return result.get("response", "Sin respuesta.")
     except Exception as e:
         return f"Error conectando con Ollama: {e}"
 
-from tools.word_tools import crear_documento_profesional, aplicar_formato_word
-from tools.excel_tools import escribir_excel, aplicar_formato_excel, actualizar_excel_existente
-from tools.ppt_tools import actualizar_ppt, crear_ppt_base
 
 # --- COMANDOS BASE ---
 

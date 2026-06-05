@@ -18,3 +18,5 @@ temp/*
 !temp/.gitkeep
 inputs/*
 !inputs/.gitkeep
+templates/*
+!templates/.gitkeep

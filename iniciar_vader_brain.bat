@@ -22,7 +22,7 @@ echo [2/3] Activando entorno 'agente_ia'...
 call %CONDA_ACTIVATE% agente_ia
 if errorlevel 1 (
     echo Error: No se pudo activar el entorno de Conda 'agente_ia'.
-    echoAsegurate de haberlo creado como dice en tu README.
+    echo Asegurate de haberlo creado como dice en tu README.
     pause
     exit /b 1
 )

@@ -69,14 +69,15 @@ def aplicar_formato_excel(filename: str, context: str = "outputs") -> str:
             # Autofit simple (ajuste de ancho de columnas por contenido)
             for col in ws.columns:
                 max_length = 0
-                column = col[0].column_letter # Get the column name
+                column = col[0].column_letter  # Get the column name
                 for cell in col:
-                    try:
-                        if len(str(cell.value)) > max_length:
-                            max_length = len(cell.value)
-                    except:
-                        pass
-                adjusted_width = (max_length + 2)
+                    if cell.value is None:
+                        continue
+                    longitud = len(str(cell.value))  # str() para soportar números
+                    if longitud > max_length:
+                        max_length = longitud
+                # Limitar el ancho máximo para que columnas largas no desborden
+                adjusted_width = min(max_length + 2, 60)
                 ws.column_dimensions[column].width = adjusted_width
 
         nuevo_nombre = os.path.splitext(filename)[0] + "_formateado.xlsx"
@@ -110,19 +111,30 @@ def crear_excel_complejo_desde_json(filename: str, json_str: str, context: str =
 
         filepath = resolve_path(filename, context)
         wb = openpyxl.Workbook()
+        default_sheet = wb.active
 
-        # Eliminar la hoja por defecto si el JSON viene con más hojas
-        if len(data) > 0:
-            default_sheet = wb.active
-            wb.remove(default_sheet)
-
+        hojas_creadas = 0
         for idx, hoja_datos in enumerate(data):
-            nombre_hoja = hoja_datos.get("hoja", f"Hoja{idx+1}")
-            filas = hoja_datos.get("datos", [])
+            if not isinstance(hoja_datos, dict):
+                continue
+            # Nombre de hoja saneado (Excel limita a 31 chars y prohíbe : \ / ? * [ ])
+            nombre_hoja = str(hoja_datos.get("hoja", f"Hoja{idx+1}"))
+            for c in r':\/?*[]':
+                nombre_hoja = nombre_hoja.replace(c, " ")
+            nombre_hoja = nombre_hoja.strip()[:31] or f"Hoja{idx+1}"
 
+            filas = hoja_datos.get("datos", [])
             ws = wb.create_sheet(nombre_hoja)
             for fila in filas:
-                ws.append(fila)
+                if isinstance(fila, list):
+                    ws.append(fila)
+            hojas_creadas += 1
+
+        # Guarda: si no se creó ninguna hoja válida, no romper openpyxl
+        if hojas_creadas == 0:
+            default_sheet.append(["Sin datos generados"])
+        else:
+            wb.remove(default_sheet)
 
         wb.save(filepath)
         # Aplicamos formato automáticamente a todas las hojas del archivo recién creado

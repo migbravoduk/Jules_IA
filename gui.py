@@ -2,11 +2,28 @@ import customtkinter as ctk
 import tkinter as tk
 from tkinter import filedialog
 import os
+import sys
+import threading
+import queue
 from main import (
     cmd_listar, cmd_leer, cmd_crear_docx_profesional,
     cmd_escribir_excel, cmd_actualizar_ppt, ask_ollama
 )
 from tools.ai_tools import dispatcher_ia
+
+
+class _RedirectorConsola:
+    """Redirige la salida estándar (print) a una cola para mostrarla en la GUI."""
+
+    def __init__(self, cola: queue.Queue):
+        self.cola = cola
+
+    def write(self, texto: str):
+        if texto:
+            self.cola.put(texto)
+
+    def flush(self):
+        pass
 
 # Configuración inicial de CustomTkinter
 ctk.set_appearance_mode("Dark")
@@ -23,7 +40,12 @@ class AgenteArchivosApp(ctk.CTk):
         self.archivo_seleccionado = ctk.StringVar(value="")
         self.tipo_archivo = ctk.StringVar(value="Word")
 
+        # Cola para el progreso en vivo desde el hilo de trabajo
+        self.cola_log = queue.Queue()
+        self._procesando = False
+
         self.crear_widgets()
+        self._procesar_cola_log()
 
     def crear_widgets(self):
         # --- Panel Izquierdo: Controles ---
@@ -87,6 +109,24 @@ class AgenteArchivosApp(ctk.CTk):
         self.consola.see("end")
         self.consola.configure(state="disabled")
 
+    def _log_raw(self, texto):
+        """Inserta texto sin saltos extra (usado para el progreso en vivo)."""
+        self.consola.configure(state="normal")
+        # '\r' (retorno de carro) se usa para barras de progreso; lo normalizamos
+        self.consola.insert("end", texto.replace("\r", "\n"))
+        self.consola.see("end")
+        self.consola.configure(state="disabled")
+
+    def _procesar_cola_log(self):
+        """Vacía periódicamente la cola de progreso hacia la consola de la GUI."""
+        try:
+            while True:
+                texto = self.cola_log.get_nowait()
+                self._log_raw(texto)
+        except queue.Empty:
+            pass
+        self.after(100, self._procesar_cola_log)
+
     def seleccionar_archivo(self):
         filepath = filedialog.askopenfilename(initialdir="outputs", title="Seleccionar Archivo")
         if filepath:
@@ -127,23 +167,40 @@ class AgenteArchivosApp(ctk.CTk):
              self.log(f"Acción no definida para {tipo}.")
 
     def ejecutar_ia(self):
+        if self._procesando:
+            self.log("Ya hay una tarea en curso. Espera a que termine.")
+            return
+
         instruccion = self.texto_input.get("1.0", "end-1c").strip()
         if not instruccion:
             self.log("Error: Ingresa una instrucción para la IA.")
             return
 
         self.log(f"Enviando instrucción al Dispatcher IA:\n-> {instruccion}")
-        # Deshabilitar botón mientras procesa (simulado, no async)
-        self.btn_ejecutar_ia.configure(state="disabled")
-        self.update()
+        self._procesando = True
+        self.btn_ejecutar_ia.configure(state="disabled", text="Procesando...")
 
+        # Ejecutar en un hilo aparte para no congelar la GUI.
+        hilo = threading.Thread(target=self._tarea_ia, args=(instruccion,), daemon=True)
+        hilo.start()
+
+    def _tarea_ia(self, instruccion):
+        """Corre en un hilo de fondo: redirige print() a la consola y ejecuta el dispatcher."""
+        stdout_original = sys.stdout
+        sys.stdout = _RedirectorConsola(self.cola_log)
         try:
             resultado = dispatcher_ia(instruccion)
-            self.log(f"Resultado IA:\n{resultado}")
+            self.cola_log.put(f"\n\nResultado IA:\n{resultado}\n\n")
         except Exception as e:
-            self.log(f"Error en ejecución IA: {e}")
+            self.cola_log.put(f"\n\nError en ejecución IA: {e}\n\n")
         finally:
-            self.btn_ejecutar_ia.configure(state="normal")
+            sys.stdout = stdout_original
+            # Reactivar el botón desde el hilo de la GUI
+            self.after(0, self._finalizar_tarea_ia)
+
+    def _finalizar_tarea_ia(self):
+        self._procesando = False
+        self.btn_ejecutar_ia.configure(state="normal", text="Generar con IA")
 
 if __name__ == "__main__":
     app = AgenteArchivosApp()
