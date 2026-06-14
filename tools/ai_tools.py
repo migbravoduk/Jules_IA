@@ -177,7 +177,7 @@ def enviar_a_ia_externa(prompt: str, motor: str) -> str:
         return ask_gemini_web(prompt)
     return ask_chatgpt_web(prompt)
 
-def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: str = "gemini") -> str:
+def cmd_crear_ppt_compleja_con_ia(instruccion: str, filename: str, motor: str = "gemini") -> str:
     """Orquesta la creación de una PPT compleja usando IA Externa."""
     prompt = (
         f"Actúa como un diseñador de presentaciones ejecutivas experto.\n"
@@ -208,7 +208,7 @@ def cmd_crear_ppt_compleja_con_chatgpt(instruccion: str, filename: str, motor: s
     texto_json = limpiar_json_de_chatgpt(respuesta)
     return crear_ppt_compleja_desde_json(filename, texto_json)
 
-def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str, motor: str = "gemini") -> str:
+def cmd_crear_word_complejo_con_ia(instruccion: str, filename: str, motor: str = "gemini") -> str:
     """Orquesta la creación de un Word complejo usando IA Externa."""
     prompt = (
         f"Actúa como un investigador académico experto generando un informe formal en formato APA.\n"
@@ -236,7 +236,7 @@ def cmd_crear_word_complejo_con_chatgpt(instruccion: str, filename: str, motor: 
     texto_json = limpiar_json_de_chatgpt(respuesta)
     return crear_word_complejo_desde_json(filename, texto_json)
 
-def cmd_crear_excel_complejo_con_chatgpt(instruccion: str, filename: str, motor: str = "gemini") -> str:
+def cmd_crear_excel_complejo_con_ia(instruccion: str, filename: str, motor: str = "gemini") -> str:
     """Orquesta la creación de un Excel complejo usando IA Externa (Gemini por defecto)."""
     prompt = (
         f"Actúa como un analista de datos experto.\n"
@@ -509,7 +509,7 @@ def cmd_crear_ppt_deep_research(instruccion: str, filename: str, motor: str = "g
     print(f"🏗️ [Deep Research] Ensamblando presentación de {len(ppt_final_json)} slides...")
     return crear_ppt_compleja_desde_json(filename, json.dumps(ppt_final_json))
 
-def cmd_revisar_mejorar_archivo_con_chatgpt(instruccion: str, filename_origen: str) -> str:
+def cmd_revisar_mejorar_archivo_con_ia(instruccion: str, filename_origen: str) -> str:
     """
     Lee un archivo desde 'inputs' o 'outputs', envía su contenido a ChatGPT junto
     con la instrucción del usuario, y crea un nuevo archivo de Word con la mejora o análisis.
@@ -656,23 +656,74 @@ def cmd_profundizar_word_con_gemini(filename: str, instruccion_adicional: str = 
     print(f"🏗️ [Profundizar Word] Ensamblando documento mejorado ({len(documento_final_json)} bloques)...")
     return crear_word_complejo_desde_json(nombre_salida, json.dumps(documento_final_json))
 
+def cmd_formatear_word_plano_ollama(filename: str, motor: str = "llama3") -> str:
+    """Extrae texto plano de un Word, lo envía a Ollama en lotes para clasificar su estructura y genera un Word formateado APA."""
+    print(f"📤 [Formato Ollama] Extrayendo texto de '{filename}'...")
+    texto_original = extraer_texto_word(filename)
+    if texto_original.startswith("Error"):
+        return texto_original
+
+    # Dividir en párrafos y quitar saltos de línea extra
+    parrafos = [p.strip() for p in texto_original.split('\n') if p.strip()]
+    if not parrafos:
+        return f"Error: No se encontró texto en {filename}"
+
+    # Chunking: lotes de 15 párrafos
+    batch_size = 15
+    lotes = [parrafos[i:i + batch_size] for i in range(0, len(parrafos), batch_size)]
+    
+    documento_final_json = []
+    
+    print(f"📚 [Formato Ollama] Procesando {len(parrafos)} párrafos en {len(lotes)} lotes...")
+    
+    for idx, lote in enumerate(lotes):
+        print(f"✍️ [Formato Ollama] Clasificando lote {idx + 1}/{len(lotes)}...")
+        lote_numerado = "\n".join([f"[{i+1}] {p}" for i, p in enumerate(lote)])
+        
+        prompt = (
+            f"Actúa como un experto en análisis de texto. Clasifica estructuralmente cada línea del siguiente fragmento de texto.\n"
+            f"Elige el tipo correcto entre: 'titulo', 'subtitulo', 'parrafo', 'lista'.\n"
+            f"Si es un título principal, usa 'titulo'. Si es un título secundario o nombre de sección, usa 'subtitulo'.\n"
+            f"CRÍTICO: Responde ÚNICAMENTE con un array JSON válido, sin texto extra antes ni después.\n\n"
+            f"Fragmento:\n{lote_numerado}\n\n"
+            f"Formato esperado:\n"
+            f"[\n"
+            f"  {{\"tipo\": \"titulo\", \"texto\": \"Texto de la línea sin corchetes\"}},\n"
+            f"  {{\"tipo\": \"parrafo\", \"texto\": \"Texto de la línea sin corchetes\"}}\n"
+            f"]"
+        )
+        
+        respuesta = ask_ollama(prompt, model=motor)
+        if "Error conectando" in respuesta:
+            return f"Error procesando lote {idx + 1}: {respuesta}"
+            
+        bloques, err = parsear_json_ia(respuesta)
+        if err or not isinstance(bloques, list):
+            print(f"⚠️ Error parseando lote {idx + 1}. Usando párrafos planos por defecto. Detalles: {err}")
+            for p in lote:
+                documento_final_json.append({"tipo": "parrafo", "texto": p})
+        else:
+            documento_final_json.extend(bloques)
+
+    # Nombre del archivo de salida
+    import os
+    nombre_salida = f"formateado_{os.path.basename(filename)}"
+    print(f"🏗️ [Formato Ollama] Ensamblando documento Word APA ({len(documento_final_json)} bloques)...")
+    return crear_word_complejo_desde_json(nombre_salida, json.dumps(documento_final_json))
+
+
 def cmd_copiar_formato_word(instruccion: str) -> str:
     """
-    Copia el formato de un documento Word EJEMPLO a un documento DESTINO.
-
-    Detecta dos nombres de archivo .docx en la instrucción:
-      - El PRIMERO es el ejemplo (la guía de formato, en 'templates/').
-      - El SEGUNDO es el destino a reformatear (en 'inputs/').
-
-    Si solo hay un .docx, asume que es el destino y que el ejemplo es el único
-    .docx presente en 'templates/'.
+    Formatea un documento Word. 
+    Si hay dos .docx (ejemplo y destino), copia el formato usando heurísticas locales.
+    Si hay solo un .docx, procesa todo el documento plano y le da formato APA estructurado usando Ollama.
     """
     # Palabras conectoras que pueden quedar pegadas delante del nombre del archivo
     _STOP = {
         "copia", "copiar", "aplica", "aplicar", "usa", "usar", "replica",
         "replicar", "clona", "clonar", "el", "la", "los", "las", "formato",
         "formatos", "de", "del", "a", "al", "con", "y", "documento", "word",
-        "archivo", "mismo", "misma",
+        "archivo", "mismo", "misma", "formatea", "formatear", "dale", "dar"
     }
 
     def _limpiar_nombre(bruto: str) -> str:
@@ -690,25 +741,13 @@ def cmd_copiar_formato_word(instruccion: str) -> str:
         return copiar_formato_word(ejemplo, destino)
 
     if len(archivos) == 1:
-        # Un solo archivo: es el destino; buscar el ejemplo en templates/
+        # Un solo archivo: usar Ollama para dar formato APA inteligente al documento plano
         destino = archivos[0]
-        try:
-            ruta_templates = BASE_DIRS["templates"]
-            candidatos = [f.name for f in ruta_templates.iterdir()
-                          if f.is_file() and f.suffix.lower() == ".docx"]
-        except Exception:
-            candidatos = []
-        if len(candidatos) == 1:
-            return copiar_formato_word(candidatos[0], destino)
-        if not candidatos:
-            return ("No encontré un documento de ejemplo. Coloca el .docx con el "
-                    "formato deseado en la carpeta 'templates/' y vuelve a intentarlo.")
-        return ("Hay varios .docx en 'templates/'. Especifica cuál es el ejemplo, p. ej.:\n"
-                f"'copia el formato de {candidatos[0]} a {destino}'")
+        from config import OLLAMA_MODEL
+        return cmd_formatear_word_plano_ollama(destino, motor=OLLAMA_MODEL)
 
-    return ("Para copiar formato indica los dos archivos .docx, por ejemplo:\n"
-            "'copia el formato de guia.docx a informe.docx'\n"
-            "El ejemplo (guía) va en 'templates/' y el destino en 'inputs/'.")
+    return ("Para dar formato a un documento, indica el archivo .docx (e.g. 'formatea el word documento.docx').\n"
+            "Si deseas copiar formato entre documentos, indica ambos: 'copia formato de guia.docx a informe.docx'.")
 
 
 def dispatcher_ia(instruccion: str) -> str:
@@ -734,7 +773,8 @@ def dispatcher_ia(instruccion: str) -> str:
         "aplica el formato", "aplicar formato", "aplica formato",
         "mismo formato", "usa el formato", "usar el formato",
         "replica el formato", "replicar formato", "clona el formato",
-        "copia los formatos", "copiar el formato",
+        "copia los formatos", "copiar el formato", "formatea el word",
+        "formatea", "formatear", "dale formato"
     ]
     if any(kw in instruccion_lower for kw in KEYWORDS_FORMATO):
         return cmd_copiar_formato_word(instruccion)
@@ -785,7 +825,7 @@ def dispatcher_ia(instruccion: str) -> str:
         if es_deep_research:
             return cmd_crear_word_deep_research(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
         elif es_complejo:
-            return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
+            return cmd_crear_word_complejo_con_ia(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
         else:
             return cmd_crear_docx_profesional(titulo=f"Informe: {tema}", tema=tema, filename=f"{nombre_limpio}.docx")
 
@@ -797,7 +837,7 @@ def dispatcher_ia(instruccion: str) -> str:
         if es_deep_research:
             return cmd_crear_excel_deep_research(instruccion, f"{nombre_limpio}.xlsx", motor=motor_ia)
         elif es_complejo:
-            return cmd_crear_excel_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.xlsx", motor=motor_ia)
+            return cmd_crear_excel_complejo_con_ia(instruccion, f"{nombre_limpio}.xlsx", motor=motor_ia)
         else:
             datos = [["Nombre", "Valor"], ["Dato A", 10], ["Dato B", 20]]
             return cmd_escribir_excel(f"{nombre_limpio}.xlsx", "Hoja1", datos)
@@ -808,9 +848,9 @@ def dispatcher_ia(instruccion: str) -> str:
         if es_deep_research:
             return cmd_crear_ppt_deep_research(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
         elif es_complejo:
-            return cmd_crear_ppt_compleja_con_chatgpt(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
+            return cmd_crear_ppt_compleja_con_ia(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
         else:
-            return cmd_crear_ppt_compleja_con_chatgpt(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
+            return cmd_crear_ppt_compleja_con_ia(instruccion, f"{nombre_limpio}.pptx", motor=motor_ia)
 
     # --- TXT / TEMAS ---
     elif "escribe" in instruccion_lower or "crea un tema" in instruccion_lower:
@@ -849,7 +889,7 @@ def dispatcher_ia(instruccion: str) -> str:
     ]):
         match_archivo = re.search(r'archivo\s+([a-zA-Z0-9_.\-]+)', instruccion_lower)
         if match_archivo:
-            return cmd_revisar_mejorar_archivo_con_chatgpt(instruccion, match_archivo.group(1))
+            return cmd_revisar_mejorar_archivo_con_ia(instruccion, match_archivo.group(1))
         return "Para revisar o mejorar un archivo indica su nombre con extensión (ej. 'revisa el archivo datos.txt')."
 
     # --- RESUMIR WEB ---
@@ -875,7 +915,7 @@ def dispatcher_ia(instruccion: str) -> str:
 
     elif es_complejo:
         tema, nombre_limpio = _extraer_tema_y_nombre("investigacion_general")
-        return cmd_crear_word_complejo_con_chatgpt(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
+        return cmd_crear_word_complejo_con_ia(instruccion, f"{nombre_limpio}.docx", motor=motor_ia)
 
     else:
         return f"Instrucción no reconocida. Por favor especifica el tipo de archivo (word, excel, ppt) y el tema.\nInstrucción recibida: {instruccion}"

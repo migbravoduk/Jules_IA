@@ -132,13 +132,29 @@ Resume la web https://www.bcch.cl/
 Pregúntale a gemini qué es la tasa de política monetaria.
 ```
 
-### 🎨 Copiar formato entre documentos Word
-Aplica el formato de un documento **ejemplo** (guía de estilo) a otro documento **destino** ya escrito, identificando títulos, subtítulos, encabezados y cuerpo (modo **híbrido**: usa los estilos de Word si existen y, si no, los detecta por heurística).
+### 🎨 Formatear y Copiar estilos en Word
+
+Vader_Brain tiene dos modos para dar formato a los documentos de Word, dependiendo de si usas un archivo guía (plantilla) o si dejas que la IA deduzca la estructura.
+
+#### Modo 1: Auto-Formato APA desde texto plano (Ollama Local)
+Aplica formato profesional APA estructurado a un documento Word que venga completamente plano (sin estilos de títulos, solo texto básico).
+El sistema usa una técnica de *chunking* (lotes) enviando fragmentos a tu modelo **Ollama local** para que clasifique qué párrafos son `títulos`, `subtítulos` o `cuerpo`, y luego re-ensambla un Word estilizado.
+
+1. Coloca tu documento plano en `inputs/` (p. ej. `borrador_plano.docx`).
+2. Ejecuta:
+```text
+Formatea el word borrador_plano.docx
+Dale formato al archivo borrador_plano.docx
+```
+El resultado estructurado se guardará en `outputs/` como `formateado_<archivo>.docx`.
+
+#### Modo 2: Copiar formato desde un documento Ejemplo (Plantilla)
+Aplica el formato de un documento **ejemplo** (guía de estilo) a otro documento **destino** ya escrito. Usa un modo **híbrido** (estilos de Word o heurística local).
 
 1. Coloca el documento con el formato deseado en `templates/` (p. ej. `guia.docx`).
 2. Coloca el documento a reformatear en `inputs/` (p. ej. `informe.docx`).
 3. Ejecuta:
-```
+```text
 Copia el formato de guia.docx a informe.docx
 Aplica el formato de Plantilla_APA.docx al documento mi_tesis.docx
 ```
@@ -146,7 +162,7 @@ El resultado se guarda en `outputs/` como `formateado_<destino>.docx`.
 
 **Qué se copia:** definiciones de estilo (Título, Subtítulo, Encabezado 1-3, Normal, listas), fuente por defecto, márgenes y configuración de página, y el estilo de las tablas.
 
-> 💡 **Para máxima precisión**, marca los títulos del documento destino con estilos de Word (Título, Encabezado 1, Encabezado 2…). El modo híbrido los respeta al 100 %. Para texto plano sin estilos, la skill los detecta por heurística (tamaño de fuente, negrita, longitud y numeración tipo `1.`, `1.1`), que es buena pero no infalible.
+> 💡 **Para máxima precisión en el Modo 2**, marca los títulos del documento destino con estilos de Word (Título, Encabezado 1, Encabezado 2…). El modo híbrido los respeta al 100 %. Para texto plano, usa el **Modo 1** con Ollama.
 
 ---
 
