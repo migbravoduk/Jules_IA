@@ -2,12 +2,11 @@ import pdfplumber
 import os
 from pathlib import Path
 from config import BASE_DIRS
-from tools.excel_tools import cmd_escribir_excel
 
 def extraer_tablas_a_excel(filepath: str) -> str:
     """
-    Extrae tablas de un archivo PDF y las guarda en un archivo de Excel básico.
-    Usa la herramienta existente cmd_escribir_excel.
+    Extrae tablas de un archivo PDF y las guarda en un archivo de Excel básico
+    usando openpyxl directamente.
     """
     if not filepath.endswith('.pdf'):
         return "El archivo debe ser un PDF."
