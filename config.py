@@ -41,7 +41,11 @@ OLLAMA_URL = _env("OLLAMA_URL", "http://localhost:11434/api/generate")
 OLLAMA_MODEL = _env("OLLAMA_MODEL", "llama3")
 OLLAMA_TIMEOUT = _env_int("OLLAMA_TIMEOUT", 60)
 
-# ── IA web (Selenium) ──────────────────────────────────────────────
+# ── APIs Oficiales (Prioridad sobre Selenium) ──────────────────────
+GEMINI_API_KEY = _env("GEMINI_API_KEY", "")
+OPENAI_API_KEY = _env("OPENAI_API_KEY", "")
+
+# ── IA web (Selenium Fallback) ─────────────────────────────────────
 # Motor por defecto cuando el usuario no especifica: "gemini" o "chatgpt".
 MOTOR_IA_DEFECTO = _env("MOTOR_IA_DEFECTO", "gemini").lower()
 

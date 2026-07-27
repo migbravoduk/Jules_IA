@@ -172,10 +172,24 @@ def parsear_json_ia(respuesta: str):
             return None, f"{e} | Fragmento: {texto[:300]}"
 
 def enviar_a_ia_externa(prompt: str, motor: str) -> str:
-    """Envía el prompt a ChatGPT o Gemini según el motor seleccionado."""
+    """Envía el prompt a ChatGPT o Gemini según el motor seleccionado, priorizando API oficial."""
+    from config import GEMINI_API_KEY, OPENAI_API_KEY
+    from tools.api_ai_tools import ask_gemini_api, ask_openai_api
+    
     if motor == "gemini":
+        if GEMINI_API_KEY:
+            return ask_gemini_api(prompt)
+        # Fallback a web si no hay key
         return ask_gemini_web(prompt)
-    return ask_chatgpt_web(prompt)
+        
+    if motor == "chatgpt":
+        if OPENAI_API_KEY:
+            return ask_openai_api(prompt)
+        # Fallback a web si no hay key
+        return ask_chatgpt_web(prompt)
+        
+    # Por defecto
+    return ask_gemini_web(prompt)
 
 def cmd_crear_ppt_compleja_con_ia(instruccion: str, filename: str, motor: str = "gemini") -> str:
     """Orquesta la creación de una PPT compleja usando IA Externa."""
@@ -764,6 +778,35 @@ def dispatcher_ia(instruccion: str) -> str:
     # --- LISTAR ---
     if "lista" in instruccion_lower or "mostrar archivos" in instruccion_lower:
         return cmd_listar()
+
+    # --- LOCAL RAG (Consultar documentos propios) ---
+    KEYWORDS_RAG = [
+        "mis documentos", "mis archivos", "en la carpeta", "documentos locales",
+        "según los pdf", "segun los pdf", "basándote en los archivos"
+    ]
+    if any(kw in instruccion_lower for kw in KEYWORDS_RAG):
+        from tools.rag_tools import consultar_rag
+        return consultar_rag(instruccion)
+        
+    # --- ANÁLISIS DE DATOS (CSV/Excel) ---
+    if "analiza el archivo" in instruccion_lower or "analiza los datos" in instruccion_lower or "analiza el csv" in instruccion_lower:
+        from tools.data_tools import analizar_datos_csv
+        import re
+        match = re.search(r'([\wáéíóúñÁÉÍÓÚÑ][\w\-.áéíóúñÁÉÍÓÚÑ ]*?\.(?:csv|xlsx))', instruccion, re.IGNORECASE)
+        if match:
+            from config import BASE_DIRS
+            filepath = BASE_DIRS["inputs"] / match.group(1).strip()
+            return analizar_datos_csv(str(filepath), instruccion)
+
+    # --- EXTRACCIÓN DE PDF A EXCEL ---
+    if "extrae las tablas" in instruccion_lower or "extrae tabla" in instruccion_lower:
+        import re
+        match = re.search(r'([\wáéíóúñÁÉÍÓÚÑ][\w\-.áéíóúñÁÉÍÓÚÑ ]*?\.pdf)', instruccion, re.IGNORECASE)
+        if match:
+            from config import BASE_DIRS
+            filepath = BASE_DIRS["inputs"] / match.group(1).strip()
+            from tools.pdf_tools import extraer_tablas_a_excel
+            return extraer_tablas_a_excel(str(filepath))
 
     # --- COPIAR FORMATO ENTRE WORDS ---
     # (Se evalúa antes del enrutamiento por tipo, porque la instrucción suele
